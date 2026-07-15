@@ -54,6 +54,75 @@ if grep -Eq 'keep the apex pointed at Vercel|keep the Vercel project|restore the
   exit 1
 fi
 
+if ! grep -Fq '"cms:migrate": "bun scripts/migrate.ts"' "$ROOT/apps/web/package.json" ||
+  ! grep -Fq 'payload.db.migrate({ migrations: payloadMigrations })' "$ROOT/apps/web/scripts/migrate.ts" ||
+  ! grep -Fq 'bun /app/apps/web/scripts/migrate.ts' "$ROOT/docker/migrate-all"; then
+  printf 'local Payload migrations must use the generated static migration list\n' >&2
+  exit 1
+fi
+
+if ! grep -Fq 'max: 5' "$ROOT/apps/web/payload.config.ts" ||
+  ! grep -Fq 'max: 2' "$ROOT/apps/web/scripts/migrate.config.ts"; then
+  printf 'Payload pools must leave a client available beyond the reconnect monitor\n' >&2
+  exit 1
+fi
+
+if ! grep -Fq 'batch -1 marker before deploying' "$ROOT/apps/web/scripts/migrate.ts"; then
+  printf 'non-interactive migrations must reject unreconciled development schema changes\n' >&2
+  exit 1
+fi
+
+if ! grep -Fq 'compose_timed 10m --profile tools run --name "$container_name" --rm --no-deps migrate' "$ROOT/deploy/ops/common.sh" ||
+  ! grep -Fq 'run_migrations' "$ROOT/deploy/ops/deploy"; then
+  printf 'production migrations must have a bounded runtime and deterministic cleanup\n' >&2
+  exit 1
+fi
+
+if ! MIGRATIONS_DIR="$ROOT/apps/web/src/migrations" bun -e '
+  import { readdir } from "node:fs/promises";
+  const directory = process.env.MIGRATIONS_DIR;
+  const expected = (await readdir(directory))
+    .filter((file) => /^\d.*\.ts$/.test(file))
+    .map((file) => file.slice(0, -3))
+    .sort();
+  const { migrations } = await import(`${directory}/index.ts`);
+  const actual = migrations.map((migration) => migration.name);
+  if (new Set(actual).size !== actual.length || JSON.stringify(actual) !== JSON.stringify(expected)) {
+    process.exit(1);
+  }
+'; then
+  printf 'generated Payload migration index must include every migration once and in order\n' >&2
+  exit 1
+fi
+
+if ! grep -Fq 'const connectionString = process.env.PREDICTION_DATABASE_URI;' "$ROOT/docker/migrate-predictions.ts"; then
+  printf 'prediction migrations must fail closed without their explicit database URI\n' >&2
+  exit 1
+fi
+
+cleanup_log="$TEMP_DIR/migration-cleanup.log"
+if (
+  KOTH_RELEASE=0000000000000000000000000000000000000000
+  compose_timed() { return 124; }
+  docker() {
+    printf '%s\n' "$*" >>"$cleanup_log"
+    return 0
+  }
+  run_migrations
+); then
+  printf 'timed-out migrations must fail deployment\n' >&2
+  exit 1
+fi
+if [[ "$(grep -Fc 'rm --force koth-company-migrate-0000000000000000000000000000000000000000' "$cleanup_log")" -lt 2 ]]; then
+  printf 'timed-out migration containers must be removed before the lock is released\n' >&2
+  exit 1
+fi
+
+if [[ "$(env_value "$ROOT/deploy/env/deploy.env.example" KOTH_PUBLIC_ORIGIN)" != "https://koth.company" ]]; then
+  printf 'the shipped production verification origin must use the apex\n' >&2
+  exit 1
+fi
+
 sed -n '/^  cloudflared:/,/^  gateway:/p' "$ROOT/deploy/compose.yaml" >"$TEMP_DIR/cloudflared-compose.yaml"
 for argument in '--token-file' '/run/secrets/cloudflare_tunnel_token' '--url' 'http://gateway:8080'; do
   if ! grep -Fqx -- "      - $argument" "$TEMP_DIR/cloudflared-compose.yaml"; then

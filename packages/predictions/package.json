@@ -13,6 +13,9 @@
     "./services/*": "./services/*.ts",
     "./types": "./types.ts"
   },
+  "scripts": {
+    "migrate": "drizzle-kit migrate --config drizzle.config.ts"
+  },
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.6.23",
     "@koth/contracts": "workspace:*",

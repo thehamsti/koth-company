@@ -191,6 +191,7 @@ require_layout() {
   require_command curl
   require_command docker
   require_command flock
+  require_command timeout
   [[ -f "$COMPOSE_FILE" ]] || die "missing $COMPOSE_FILE"
   [[ -f "$DEPLOY_ENV" ]] || die "missing $DEPLOY_ENV"
   [[ -f "$DEPLOYMENT_RELEASE_FILE" ]] || die "missing $DEPLOYMENT_RELEASE_FILE"
@@ -244,6 +245,37 @@ compose() {
     --env-file "$DEPLOY_ENV" \
     --file "$COMPOSE_FILE" \
     "$@"
+}
+
+compose_timed() {
+  local duration="$1"
+  shift
+  KOTH_CONFIG_DIR="$KOTH_CONFIG_DIR" timeout --foreground --signal=TERM --kill-after=30s "$duration" \
+    docker compose \
+    --project-directory "$KOTH_ROOT" \
+    --env-file "$DEPLOY_ENV" \
+    --file "$COMPOSE_FILE" \
+    "$@"
+}
+
+run_migrations() {
+  local container_name="koth-company-migrate-${KOTH_RELEASE}"
+  local exit_code
+
+  docker rm --force "$container_name" >/dev/null 2>&1 || true
+  set +e
+  compose_timed 10m --profile tools run --name "$container_name" --rm --no-deps migrate
+  exit_code=$?
+  set -e
+
+  if ((exit_code != 0)); then
+    docker rm --force "$container_name" >/dev/null 2>&1 || true
+    return "$exit_code"
+  fi
+  if docker container inspect "$container_name" >/dev/null 2>&1; then
+    docker rm --force "$container_name" >/dev/null 2>&1 || true
+    die "migration container remained after completion"
+  fi
 }
 
 read_release() {

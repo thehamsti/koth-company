@@ -35,7 +35,8 @@ export default buildConfig({
   db: postgresAdapter({
     pool: {
       connectionString: process.env.DATABASE_URI ?? "",
-      max: 1,
+      // Payload reserves one client to monitor reconnects, so a size of one deadlocks every query.
+      max: 5,
       idleTimeoutMillis: 5_000,
       maxLifetimeSeconds: 60,
     },

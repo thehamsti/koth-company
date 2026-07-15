@@ -19,11 +19,6 @@ if [[ -n "$current" ]]; then
   require_full_sha "$current"
 fi
 
-export KOTH_RELEASE="$release"
-compose --profile tools config --quiet
-compose --profile tools pull web api migrate gateway cloudflared
-compose --profile tools run --rm --no-deps migrate
-
 restore_on_error() {
   local exit_code=$?
   trap - ERR
@@ -36,6 +31,11 @@ restore_on_error() {
   exit "$exit_code"
 }
 trap restore_on_error ERR
+
+export KOTH_RELEASE="$release"
+compose --profile tools config --quiet
+compose --profile tools pull web api migrate gateway cloudflared
+run_migrations
 
 start_release "$release"
 

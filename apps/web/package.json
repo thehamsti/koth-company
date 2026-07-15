@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start -p 3002",
     "cms:generate": "payload generate:types && payload generate:importmap",
-    "cms:migrate": "payload migrate",
+    "cms:migrate": "bun scripts/migrate.ts",
     "cms:migration:create": "payload migrate:create",
     "test": "bun test",
     "typecheck": "tsc --noEmit --pretty false"

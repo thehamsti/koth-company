@@ -7,7 +7,7 @@
     "dev": "bun --watch server.ts",
     "build": "bun build server.ts --target=bun --outdir=dist",
     "start": "bun dist/server.js",
-    "migrate": "bunx drizzle-kit migrate --config ../../packages/predictions/drizzle.config.ts",
+    "migrate": "bun run --cwd ../../packages/predictions migrate",
     "grant-admin": "bun cli/grant-admin.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit --pretty false"

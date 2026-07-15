@@ -45,8 +45,8 @@ event, so the generated rewards are 1 Crown and 10 Crowns.
 requires a higher value; the API rejects values above 30 seconds.
 
 `PREDICTION_DATABASE_URI` is required in the separated API deployment. Keep `BETTER_AUTH_URL`, the
-OAuth redirect, and the EventSub callback on the public apex even while validating the temporary
-`origin.koth.company` hostname.
+OAuth redirect, and the EventSub callback on the public apex. `origin.koth.company` is only an
+anonymous diagnostic alias.
 
 ## Bring-up
 
@@ -61,9 +61,9 @@ OAuth redirect, and the EventSub callback on the public apex even while validati
    replaces the existing subscription so a changed callback secret takes effect.
 5. Activate an event. The rewards become visible on Twitch. Completing the event disables them.
 
-Before apex cutover, deployment verifies a correctly signed EventSub challenge locally and verifies
-anonymous health and public SSE through `origin.koth.company`. Perform Twitch OAuth and a real
-EventSub subscription sync only against `https://koth.company`, because Twitch validates the exact
+Deployment verifies a correctly signed EventSub challenge locally, then verifies anonymous health
+and public SSE through `KOTH_PUBLIC_ORIGIN` (`https://koth.company` in production). Perform Twitch
+OAuth and real EventSub synchronization only against the apex because Twitch validates the exact
 registered production URLs.
 
 Viewers must sign into `/predictions` with Twitch before redeeming. Unknown KOTH users, out-of-sync

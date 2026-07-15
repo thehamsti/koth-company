@@ -62,7 +62,7 @@ The deploy scripts reject placeholders, duplicate or missing keys, invalid URLs,
 
 ```dotenv
 KOTH_REGISTRY=ghcr.io/thehamsti/koth-company
-KOTH_PUBLIC_ORIGIN=https://origin.koth.company
+KOTH_PUBLIC_ORIGIN=https://koth.company
 ```
 
 ## Provision the Cloudflare tunnel
@@ -78,8 +78,9 @@ CAA  @  0 issue "letsencrypt.org"
 ```
 
 Cloudflare may import the old Vercel apex and wildcard records while scanning the zone. Delete those
-records; they point at a project that no longer exists. Do not add an apex application record until
-the origin deployment passes its preflight.
+records; they point at a project that no longer exists. Before deployment, create proxied Tunnel
+records for both the apex and `origin.koth.company`. A Cloudflare 530 response is expected until the
+first connector starts.
 
 On a trusted admin machine with `cloudflared` installed, authenticate to that Cloudflare account,
 create the dedicated tunnel, and write its token to a private file:
@@ -93,8 +94,8 @@ cloudflared tunnel token koth-company > cloudflare-tunnel.token
 
 The create command also writes a tunnel credentials JSON file. The deployed connector does not need that file or the account-level `cert.pem`; it authenticates with the generated token and sends all traffic to the explicit Compose origin `http://gateway:8080`.
 
-In the new Cloudflare DNS zone, create a proxied `CNAME` named `origin` whose target is
-`<TUNNEL_ID>.cfargotunnel.com`. The production tunnel ID is
+In the new Cloudflare DNS zone, create proxied `CNAME` records for both `@` and `origin` whose target
+is `<TUNNEL_ID>.cfargotunnel.com`. The production tunnel ID is
 `8300af3e-7cff-403a-9327-010a0635de92`; confirm it without exposing the token:
 
 ```sh
@@ -104,10 +105,12 @@ cloudflared tunnel list --output json | jq -r '.[] | select(.name == "koth-compa
 Do not run `cloudflared tunnel route dns` with a per-machine default configuration for another zone;
 an inherited tunnel or hostname can create a record in the wrong zone.
 
-Once the zone contains the CAA and `origin` records, open the Vercel dashboard, select **Domains →
+Before deployment, add Cloudflare cache bypass rules for `/api/*`, `/predictions*`, and `/admin*`.
+
+Once the zone contains the CAA and Tunnel records, open the Vercel dashboard, select **Domains →
 koth.company → Nameservers → Edit**, and replace the Vercel nameservers with the two nameservers
-assigned by Cloudflare. The website is intentionally unavailable until the deployment and apex
-cutover below finish.
+assigned by Cloudflare. Both hostnames become public as delegation propagates and remain unavailable
+until the first healthy connector starts.
 
 Copy only the token to `hamsti1`, install it as a root-readable secret, and remove the transfer copies:
 
@@ -120,7 +123,7 @@ rm -f cloudflare-tunnel.token
 
 Do not add the token to an environment file. Both bridge networks allow required outbound database and Twitch traffic, but no service is reachable from a host or internet port.
 
-## First deployment and staged preflight
+## First deployment and production-host verification
 
 Start with `PREDICTION_MARKETS_ENABLED=false` unless live trading is intentionally part of the cutover. The required second argument makes that decision explicit:
 
@@ -137,9 +140,9 @@ Before recording the release as current, deployment performs all of these checks
 - Payload and prediction migrations in a read-only, resource-limited container that receives no Twitch, auth, ingestion, or CV credentials.
 - Internal web readiness, API/database readiness, and Caddy routing.
 - A locally signed EventSub callback challenge through Caddy.
-- Anonymous `/healthz`, API liveness/readiness, and an initial public SSE event through `KOTH_PUBLIC_ORIGIN` and the Cloudflare edge.
+- Anonymous `/healthz`, API liveness/readiness, and an initial public SSE event through the configured apex and Cloudflare edge.
 
-The origin hostname cannot correctly exercise Twitch OAuth cookies or the production EventSub callback while `BETTER_AUTH_URL` and Twitch remain configured for `https://koth.company`. Test those flows on the apex after cutover. Migrations are not reversible, so every migration must remain compatible with the previous release.
+The automated deployment checks are anonymous. After they pass, test authenticated Twitch OAuth and a real EventSub synchronization on `https://koth.company`. Never use `origin.koth.company` for authentication or callbacks because Better Auth and Twitch are pinned to the apex. Migrations are not reversible, so every migration must remain compatible with the previous release.
 
 ## Grant Hydramist control access
 
@@ -158,16 +161,14 @@ sudo env \
 
 The command is idempotent and fails with an actionable message if Hydramist has not signed in with Twitch yet.
 
-## Apex cutover
+## Post-deploy acceptance
 
-After the anonymous origin checks pass:
+After the automated apex checks pass:
 
-1. Add Cloudflare cache bypass rules for `/api/*`, `/predictions*`, and `/admin*`.
-2. In Cloudflare DNS, add a proxied apex `CNAME` targeting `<TUNNEL_ID>.cfargotunnel.com`.
-3. Change `KOTH_PUBLIC_ORIGIN` in `/srv/koth-company/deploy.env` to `https://koth.company`, then run `sudo /srv/koth-company/ops/status` so the same external gate checks the apex.
-4. Verify Twitch sign-in, authenticated `/predictions/control`, a real EventSub sync/challenge, trading, and CV SSE reconnection on the apex.
-5. If markets were staged off, change `PREDICTION_MARKETS_ENABLED=true` and redeploy the same SHA with `--markets-enabled`.
-6. Confirm the public routes are healthy and remove `origin.koth.company` only after the observation window.
+1. Run the status command again and verify Twitch sign-in, authenticated `/predictions/control`, a real EventSub sync/challenge, trading, and CV SSE reconnection.
+2. After Hydramist signs in once with Twitch, grant the account control access using the command above.
+3. If markets were staged off, change `PREDICTION_MARKETS_ENABLED=true` and redeploy the same SHA with `--markets-enabled`.
+4. Observe both public routes and retire the diagnostic `origin.koth.company` alias only after the observation window.
 
 The existing Twitch application remains in use. Production Better Auth, OAuth redirect, and EventSub callback URLs stay on `https://koth.company`, so the hosting split does not require another app.
 
@@ -180,7 +181,8 @@ sudo /srv/koth-company/ops/rollback
 ```
 
 There is no Vercel application rollback target. Use the retained image rollback for application
-failures; for Cloudflare failures, keep the apex record disabled until the tunnel route is repaired.
+failures. Application rollback cannot repair Cloudflare failures; leave both records on the dedicated
+tunnel while repairing its token, connector, or routing, and do not point them back to deleted Vercel.
 
 Successful operations retain current and previous web, API, and migration images and remove older SHA-tagged KOTH images only. Rollback uses retained images and pulls a component only if that specific image is unexpectedly absent.
 
