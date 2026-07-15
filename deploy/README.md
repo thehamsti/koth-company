@@ -1,0 +1,180 @@
+# Manual `hamsti1` deployment
+
+This stack is independent of Coolify and the host Traefik instance. It publishes no host ports. A dedicated named Cloudflare Tunnel reaches Caddy on the Compose `edge` network; only Caddy also joins the private application network. The connector reads its tunnel token from a file and supplies its single origin URL on the command line, so it does not depend on dashboard-managed ingress rules.
+
+## Publish an immutable release
+
+Push the desired commit and run **Release self-hosted images** with its branch, tag, or full SHA. The workflow validates the exact checkout, publishes private `linux/amd64` images tagged with its resolved 40-character SHA, and uploads `koth-deploy-<SHA>`, an artifact containing the deployment files from that same checkout.
+
+Download and inspect that artifact rather than copying deployment files from a later `main` checkout:
+
+```sh
+SHA=0123456789abcdef0123456789abcdef01234567
+gh run download RUN_ID --name "koth-deploy-$SHA"
+tar -xzf "koth-deploy-$SHA.tar.gz"
+test "$(cat "koth-company-$SHA/RELEASE")" = "$SHA"
+```
+
+The root-owned Docker client used by the operations scripts needs read access to the private packages:
+
+```sh
+sudo docker login ghcr.io --username thehamsti
+```
+
+Use a read-only classic PAT with `read:packages` when prompted. Never deploy `latest` or a branch tag.
+
+## Install the stack
+
+From the extracted `koth-company-$SHA` directory on `hamsti1`:
+
+```sh
+sudo install -d -m 0750 /srv/koth-company/ops /srv/koth-company/releases /etc/koth-company
+sudo install -m 0640 RELEASE /srv/koth-company/deployment-release
+sudo install -m 0640 deploy/compose.yaml /srv/koth-company/compose.yaml
+sudo install -m 0640 deploy/Caddyfile /srv/koth-company/Caddyfile
+sudo install -m 0750 deploy/ops/common.sh deploy/ops/deploy deploy/ops/rollback deploy/ops/status /srv/koth-company/ops/
+sudo install -m 0640 deploy/env/deploy.env.example /srv/koth-company/deploy.env
+sudo install -m 0640 deploy/env/web.env.example /etc/koth-company/web.env
+sudo install -m 0640 deploy/env/api.env.example /etc/koth-company/api.env
+sudo install -m 0640 deploy/env/migrate.env.example /etc/koth-company/migrate.env
+```
+
+If the SSH operator already has Docker access but sudo requires an interactive password, use the
+same layout under that operator's home directory. Pass both supported overrides on every operation:
+
+```sh
+export KOTH_ROOT="$HOME/koth-company"
+export KOTH_CONFIG_DIR="$HOME/.config/koth-company"
+install -d -m 0700 "$KOTH_ROOT/ops" "$KOTH_ROOT/releases" "$KOTH_CONFIG_DIR"
+# Install the same bundle and environment files under these two directories.
+KOTH_ROOT="$KOTH_ROOT" KOTH_CONFIG_DIR="$KOTH_CONFIG_DIR" \
+  "$KOTH_ROOT/ops/deploy" "$SHA" --markets-disabled
+```
+
+Keep environment files and the tunnel token mode `0600` in a user-owned install. Do not use this
+variant for an account shared with untrusted shell users.
+
+Repeat the `deployment-release`, Compose, Caddy, and operations-script installs from each new SHA bundle before deploying that SHA. Preserve the configured environment and token files. The deploy runner rejects a release whose installed bundle marker names a different commit.
+
+Replace every placeholder. Keep the existing production Payload, Better Auth, Twitch, EventSub, ingestion, and CV secrets; rotating them during this cutover would invalidate sessions or integrations. `migrate.env` intentionally contains only `DATABASE_URI`, `PAYLOAD_SECRET`, and `PREDICTION_DATABASE_URI`; those three values must exactly match the corresponding service files.
+
+The deploy scripts reject placeholders, duplicate or missing keys, invalid URLs, short secrets, mismatched migration databases, world-readable config, and an ambiguous prediction-market setting. `deploy.env` must also name the public hostname used to verify this stack:
+
+```dotenv
+KOTH_REGISTRY=ghcr.io/thehamsti/koth-company
+KOTH_PUBLIC_ORIGIN=https://origin.koth.company
+```
+
+## Provision the Cloudflare tunnel
+
+`koth.company` must use a Cloudflare DNS zone before a public Tunnel hostname can terminate TLS. Add
+the domain to the same Cloudflare account as the tunnel, copy the current Vercel apex, wildcard, and
+CAA records into the new zone, and then delegate the Vercel-registered domain to the assigned
+Cloudflare nameservers. Keep the apex pointed at Vercel during this delegation step so it is not an
+application cutover.
+
+On a trusted admin machine with `cloudflared` installed, authenticate to that Cloudflare account,
+create the dedicated tunnel, and write its token to a private file:
+
+```sh
+cloudflared tunnel login
+cloudflared tunnel create koth-company
+umask 077
+cloudflared tunnel token koth-company > cloudflare-tunnel.token
+```
+
+The create command also writes a tunnel credentials JSON file. The deployed connector does not need that file or the account-level `cert.pem`; it authenticates with the generated token and sends all traffic to the explicit Compose origin `http://gateway:8080`.
+
+In the new Cloudflare DNS zone, create a proxied `CNAME` named `origin` whose target is
+`<TUNNEL_ID>.cfargotunnel.com`. Obtain the ID without exposing the token:
+
+```sh
+cloudflared tunnel list --output json | jq -r '.[] | select(.name == "koth-company") | .id'
+```
+
+Do not run `cloudflared tunnel route dns` with a per-machine default configuration for another zone;
+an inherited tunnel or hostname can create a record in the wrong zone.
+
+Copy only the token to `hamsti1`, install it as a root-readable secret, and remove the transfer copies:
+
+```sh
+scp cloudflare-tunnel.token hamsti1:/tmp/koth-company-cloudflare-tunnel.token
+ssh hamsti1 'sudo install -o root -g root -m 0600 /tmp/koth-company-cloudflare-tunnel.token /etc/koth-company/cloudflare-tunnel.token'
+ssh hamsti1 'rm -f /tmp/koth-company-cloudflare-tunnel.token'
+rm -f cloudflare-tunnel.token
+```
+
+Do not add the token to an environment file. Both bridge networks allow required outbound database and Twitch traffic, but no service is reachable from a host or internet port.
+
+## First deployment and staged preflight
+
+Start with `PREDICTION_MARKETS_ENABLED=false` unless live trading is intentionally part of the cutover. The required second argument makes that decision explicit:
+
+```sh
+sudo /srv/koth-company/ops/deploy "$SHA" --markets-disabled
+sudo /srv/koth-company/ops/status
+```
+
+Use `--markets-enabled` only when `api.env` explicitly contains `PREDICTION_MARKETS_ENABLED=true`.
+
+Before recording the release as current, deployment performs all of these checks:
+
+- Container health for web, API, Caddy, and the Cloudflare connector.
+- Payload and prediction migrations in a read-only, resource-limited container that receives no Twitch, auth, ingestion, or CV credentials.
+- Internal web readiness, API/database readiness, and Caddy routing.
+- A locally signed EventSub callback challenge through Caddy.
+- Anonymous `/healthz`, API liveness/readiness, and an initial public SSE event through `KOTH_PUBLIC_ORIGIN` and the Cloudflare edge.
+
+The origin hostname cannot correctly exercise Twitch OAuth cookies or the production EventSub callback while `BETTER_AUTH_URL` and Twitch remain configured for `https://koth.company`. Test those flows on the apex after cutover. Migrations are not reversible, so every migration must remain compatible with the previous release.
+
+## Grant Hydramist control access
+
+Hydramist must first sign in once at `https://koth.company/predictions` with Twitch so Better Auth creates and links the account. Then run the bundled admin command against the live API container:
+
+```sh
+sudo env \
+  KOTH_RELEASE="$(sudo cat /srv/koth-company/releases/current)" \
+  KOTH_CONFIG_DIR=/etc/koth-company \
+  docker compose \
+    --project-directory /srv/koth-company \
+    --env-file /srv/koth-company/deploy.env \
+    --file /srv/koth-company/compose.yaml \
+    exec -T api bun /app/grant-admin.js --twitch-login hydramist
+```
+
+The command is idempotent and fails with an actionable message if Hydramist has not signed in with Twitch yet.
+
+## Apex cutover
+
+After the anonymous origin checks pass:
+
+1. Add Cloudflare cache bypass rules for `/api/*`, `/predictions*`, and `/admin*`.
+2. In Cloudflare DNS, replace the apex Vercel record with a proxied `CNAME` targeting
+   `<TUNNEL_ID>.cfargotunnel.com`. Keep the prior Vercel target recorded and keep the Vercel project
+   frozen as a rollback target for seven days.
+3. Change `KOTH_PUBLIC_ORIGIN` in `/srv/koth-company/deploy.env` to `https://koth.company`, then run `sudo /srv/koth-company/ops/status` so the same external gate checks the apex.
+4. Verify Twitch sign-in, authenticated `/predictions/control`, a real EventSub sync/challenge, trading, and CV SSE reconnection on the apex.
+5. If markets were staged off, change `PREDICTION_MARKETS_ENABLED=true` and redeploy the same SHA with `--markets-enabled`.
+6. Confirm Vercel API invocations fall to zero. Remove `origin.koth.company` only after the observation window.
+
+The existing Twitch application remains in use. Production Better Auth, OAuth redirect, and EventSub callback URLs stay on `https://koth.company`, so the hosting split does not require another app.
+
+## Rollback and operations
+
+Rollback swaps the current and previous immutable releases without rerunning migrations:
+
+```sh
+sudo /srv/koth-company/ops/rollback
+```
+
+For an origin-routing rollback, restore the prior Vercel apex target in Cloudflare DNS. The
+nameservers do not need to move back to Vercel.
+
+Successful operations retain current and previous web, API, and migration images and remove older SHA-tagged KOTH images only. Rollback uses retained images and pulls a component only if that specific image is unexpectedly absent.
+
+Inspect bounded logs with:
+
+```sh
+cd /srv/koth-company
+sudo KOTH_RELEASE="$(sudo cat releases/current)" docker compose --env-file deploy.env logs --tail 200 api web gateway cloudflared
+```

@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=deploy/ops/common.sh
+source "$SCRIPT_DIR/common.sh"
+
+require_layout
+acquire_lock
+ensure_disk_space
+
+current="$(read_release current || true)"
+previous="$(read_release previous || true)"
+require_full_sha "$current"
+require_full_sha "$previous"
+[[ "$current" != "$previous" ]] || die "current and previous releases are identical"
+
+export KOTH_RELEASE="$previous"
+ensure_release_images "$previous" web api
+
+restore_on_error() {
+  local exit_code=$?
+  trap - ERR
+  printf 'rollback failed; restoring %s\n' "$current" >&2
+  (start_release "$current") || true
+  exit "$exit_code"
+}
+trap restore_on_error ERR
+
+# Database migrations are deliberately not reversed; releases must use expand/contract migrations.
+start_release "$previous"
+write_release current "$previous"
+write_release previous "$current"
+trap - ERR
+prune_release_images "$previous" "$current"
+
+printf 'rolled back from %s to %s\n' "$current" "$previous"

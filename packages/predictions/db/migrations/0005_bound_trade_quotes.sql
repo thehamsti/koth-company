@@ -1,0 +1,2 @@
+CREATE INDEX "trade_quote_portfolio_created_idx" ON "prediction_market"."trade_quote" USING btree ("portfolio_id","created_at");--> statement-breakpoint
+CREATE INDEX "trade_quote_portfolio_expires_idx" ON "prediction_market"."trade_quote" USING btree ("portfolio_id","expires_at") WHERE "prediction_market"."trade_quote"."consumed_at" is null;

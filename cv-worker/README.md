@@ -1,6 +1,6 @@
 # Hydramist KOTH CV worker
 
-This package runs locally, reads the public `twitch.tv/hydramist` stream, and sends signed automation actions to the prediction server. Video inference stays on the local machine. The only uploaded image is the bounded evidence frame attached when automation pauses.
+This package runs locally, reads the public `twitch.tv/hydramist` stream, and sends signed automation actions to the prediction server. It receives automation state over a signed server-sent event stream, so idle and active operation do not poll the API. Video inference stays on the local machine. The only uploaded image is the bounded evidence frame attached when automation pauses.
 
 ## Setup
 
@@ -60,7 +60,7 @@ Low-confidence or contradictory results pause automation. Inspect the evidence i
 
 The production worker can run as a per-user LaunchAgent on the streaming Mac. Video and OCR remain local; the worker needs only outbound HTTPS access to `https://koth.company`. The bounded pause-evidence image remains the only uploaded frame.
 
-The service reads `PREDICTION_CV_SECRET` and other worker settings from the repository root's `.env.local` at runtime. The generated plist contains no secrets and forces `KOTH_SERVER_URL=https://koth.company`, even if `.env.local` points local development at another URL. The same `PREDICTION_CV_SECRET` must be configured in the Vercel production environment.
+The service reads `PREDICTION_CV_SECRET` and other worker settings from the repository root's `.env.local` at runtime. The generated plist contains no secrets and forces `KOTH_SERVER_URL=https://koth.company`, even if `.env.local` points local development at another URL. The same `PREDICTION_CV_SECRET` must be configured for the production API on `hamsti1`.
 
 Before installation, confirm `.env.local` is readable only by your user and that the production server, stream overlay, calibration, and event are ready:
 
@@ -80,9 +80,9 @@ Then manage the service from `cv-worker/`:
 ./scripts/service.sh uninstall
 ```
 
-Installation writes `~/Library/LaunchAgents/com.koth-company.cv-worker.plist` with mode `0600`. Launchd starts the worker at login, restarts it after failures with a 15-second throttle, and records output under `~/Library/Logs/koth-company/`. The worker also reconnects internally when Twitch, ffmpeg, OCR, or the production API is temporarily unavailable. It starts with `--takeover`, so a restarted process waits out and then claims a stale 15-second worker lease without bypassing an active worker.
+Installation writes `~/Library/LaunchAgents/com.koth-company.cv-worker.plist` with mode `0600`. Launchd starts the worker at login, restarts it after failures with a 15-second throttle, and records output under `~/Library/Logs/koth-company/`. The worker also reconnects internally when Twitch, ffmpeg, OCR, or the production API is temporarily unavailable. A missing event or keepalive for 30 seconds is treated as a disconnected API stream; reconnection then uses jittered exponential backoff between one and 30 seconds. It starts with `--takeover`, so a restarted process waits out and then claims a stale 15-second worker lease without bypassing an active worker.
 
-With no enabled event, the service polls production every five seconds without opening Twitch or ffmpeg. Pausing, disabling, or losing the production connection closes the active decoder; a running session opens a fresh stream iterator.
+With no enabled event, the service waits on the automation event stream without opening Twitch or ffmpeg. An owned, enabled session sends a heartbeat every five seconds, including while paused, so the server's 15-second lease remains valid. Pausing, disabling, changing ownership, or losing the production stream closes the active decoder; a confirmed running state opens a fresh stream iterator. The worker does not fall back to state polling while disconnected.
 
 A user LaunchAgent runs only while this account is logged in and the Mac is awake. Keep the Mac awake during KOTH broadcasts; no cloud vision process or inbound network tunnel is required.
 

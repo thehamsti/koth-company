@@ -9,7 +9,7 @@ import uuid
 import webbrowser
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Protocol
 
 import cv2
 import numpy as np
@@ -17,7 +17,7 @@ import typer
 import uvicorn
 
 from .calibration import autocalibrate_regions, create_calibration_app
-from .client import AutomationClient
+from .client import AutomationClient, AutomationStateFeed, AutomationStreamUpdate
 from .config import Layout, load_layout, missing_template_files, save_layout
 from .journal import ActionJournal
 from .replay import ReplayMismatchError, replay_manifest
@@ -30,8 +30,16 @@ app = typer.Typer(no_args_is_help=True)
 RUNTIME = Path(__file__).parents[2] / "runtime"
 RUNNABLE_EVENT_STATUSES = {"draft", "live"}
 TRANSIENT_LOG_INTERVAL = 30.0
-IDLE_STATE_POLL_INTERVAL = 5.0
+HEARTBEAT_INTERVAL = 5.0
 logger = logging.getLogger(__name__)
+
+
+class StateFeed(Protocol):
+    def start(self) -> None: ...
+
+    def next(self, timeout: float | None) -> AutomationStreamUpdate | None: ...
+
+    def close(self) -> None: ...
 
 
 def layout_path() -> Path:
@@ -76,7 +84,7 @@ def _log_transient_failure(
         return
     last_logged[operation] = now
     logger.warning(
-        "Worker %s failed to %s: %s; retrying on a later frame",
+        "Worker %s failed to %s: %s; retrying",
         worker_id,
         operation,
         error,
@@ -93,17 +101,20 @@ def _run_worker_frames(
     fps: float,
     takeover: bool,
     monotonic: Callable[[], float] = time.monotonic,
-    sleep: Callable[[float], None] = time.sleep,
+    state_feed: StateFeed | None = None,
     max_iterations: int | None = None,
 ) -> None:
-    last_frame = 0.0
-    last_heartbeat_attempt = 0.0
-    next_state_poll_at = 0.0
+    next_frame_at = 0.0
+    next_heartbeat_at = 0.0
     takeover_pending = takeover
     last_error_logs: dict[str, float] = {}
     interval = 1 / fps
     frame_iterator: Iterator[np.ndarray] | None = None
     iterations = 0
+    state: dict[str, object] | None = None
+    revision: str | None = None
+    awaiting_revision: str | None = None
+    feed = state_feed or AutomationStateFeed(client)
 
     def stop_capture() -> None:
         nonlocal frame_iterator
@@ -114,41 +125,53 @@ def _run_worker_frames(
             close()
         frame_iterator = None
 
+    feed.start()
     try:
         while max_iterations is None or iterations < max_iterations:
             iterations += 1
             now = monotonic()
-            if now < next_state_poll_at:
-                sleep(next_state_poll_at - now)
-                continue
-            if now - last_frame < interval:
-                sleep(interval - (now - last_frame))
-                continue
-            last_frame = now
+            deadlines: list[float] = []
+            if state is not None:
+                event = state.get("event")
+                automation = state.get("automation")
+                if isinstance(event, dict) and isinstance(event.get("id"), str):
+                    if dry_run:
+                        if awaiting_revision is None:
+                            deadlines.append(next_frame_at)
+                    elif isinstance(automation, dict) and automation.get("enabled") is True:
+                        owner = automation.get("workerId")
+                        if owner in {None, worker_id} or takeover_pending:
+                            deadlines.append(next_heartbeat_at)
+                        if (
+                            owner == worker_id
+                            and automation.get("status") == "running"
+                            and awaiting_revision is None
+                        ):
+                            deadlines.append(next_frame_at)
 
-            try:
-                state = client.state()
-            except Exception as exc:
-                stop_capture()
-                next_state_poll_at = now + IDLE_STATE_POLL_INTERVAL
-                _log_transient_failure(
-                    last_error_logs,
-                    operation="fetch automation state",
-                    error=exc,
-                    now=now,
-                    worker_id=worker_id,
-                )
-                continue
-            if not isinstance(state, dict):
-                stop_capture()
-                next_state_poll_at = now + IDLE_STATE_POLL_INTERVAL
-                _log_transient_failure(
-                    last_error_logs,
-                    operation="read automation state",
-                    error=TypeError("server returned a non-object response"),
-                    now=now,
-                    worker_id=worker_id,
-                )
+            timeout = max(0.0, min(deadlines) - now) if deadlines else None
+            update = feed.next(timeout)
+            now = monotonic()
+            if update is not None:
+                if update.state is None:
+                    stop_capture()
+                    state = None
+                    revision = None
+                    awaiting_revision = None
+                    _log_transient_failure(
+                        last_error_logs,
+                        operation="read the automation event stream",
+                        error=update.error or ConnectionError("stream disconnected"),
+                        now=now,
+                        worker_id=worker_id,
+                    )
+                    continue
+                state = update.state.payload
+                revision = update.state.revision
+                if awaiting_revision is not None and revision != awaiting_revision:
+                    awaiting_revision = None
+
+            if state is None:
                 continue
 
             if not dry_run:
@@ -158,7 +181,7 @@ def _run_worker_frames(
                     raise
                 except RetryableWorkerError as exc:
                     stop_capture()
-                    next_state_poll_at = now + IDLE_STATE_POLL_INTERVAL
+                    next_frame_at = now + interval
                     _log_transient_failure(
                         last_error_logs,
                         operation="reconcile the pending action",
@@ -174,16 +197,16 @@ def _run_worker_frames(
                         recovered.get("type", "unknown"),
                         recovered.get("eventId", "unknown"),
                     )
+                    awaiting_revision = revision
+                    stop_capture()
 
             event = state.get("event")
             if not isinstance(event, dict):
                 stop_capture()
-                next_state_poll_at = now + IDLE_STATE_POLL_INTERVAL
                 continue
             event_id = event.get("id")
             if not isinstance(event_id, str):
                 stop_capture()
-                next_state_poll_at = now + IDLE_STATE_POLL_INTERVAL
                 _log_transient_failure(
                     last_error_logs,
                     operation="read the current event",
@@ -193,8 +216,16 @@ def _run_worker_frames(
                 )
                 continue
 
-            if not dry_run and now - last_heartbeat_attempt >= 5:
-                last_heartbeat_attempt = now
+            automation = state.get("automation")
+            status = (
+                automation.get("status", "disabled") if isinstance(automation, dict) else "disabled"
+            )
+            enabled = isinstance(automation, dict) and automation.get("enabled") is True
+            owner = automation.get("workerId") if isinstance(automation, dict) else None
+            can_heartbeat = enabled and (owner in {None, worker_id} or takeover_pending)
+
+            if not dry_run and can_heartbeat and now >= next_heartbeat_at:
+                next_heartbeat_at = now + HEARTBEAT_INTERVAL
                 heartbeat: dict[str, object] = {
                     "type": "heartbeat",
                     "eventId": event_id,
@@ -207,7 +238,7 @@ def _run_worker_frames(
                     client.action(heartbeat, str(uuid.uuid4()))
                 except Exception as exc:
                     stop_capture()
-                    next_state_poll_at = now + IDLE_STATE_POLL_INTERVAL
+                    awaiting_revision = revision
                     _log_transient_failure(
                         last_error_logs,
                         operation="send a heartbeat",
@@ -219,44 +250,19 @@ def _run_worker_frames(
                 if takeover_pending:
                     takeover_pending = False
                     logger.info("Worker %s acquired the stale worker lease", worker_id)
-                try:
-                    state = client.state()
-                except Exception as exc:
+                if owner != worker_id:
+                    awaiting_revision = revision
                     stop_capture()
-                    next_state_poll_at = now + IDLE_STATE_POLL_INTERVAL
-                    _log_transient_failure(
-                        last_error_logs,
-                        operation="refresh automation state",
-                        error=exc,
-                        now=now,
-                        worker_id=worker_id,
-                    )
-                    continue
-                if not isinstance(state, dict):
-                    stop_capture()
-                    next_state_poll_at = now + IDLE_STATE_POLL_INTERVAL
-                    _log_transient_failure(
-                        last_error_logs,
-                        operation="read refreshed automation state",
-                        error=TypeError("server returned a non-object response"),
-                        now=now,
-                        worker_id=worker_id,
-                    )
-                    continue
 
-            if not isinstance(state.get("event"), dict):
-                stop_capture()
-                next_state_poll_at = now + IDLE_STATE_POLL_INTERVAL
-                continue
-            automation = state.get("automation")
-            status = (
-                automation.get("status", "disabled") if isinstance(automation, dict) else "disabled"
+            ready = automation_ready(str(status), dry_run=dry_run) and (
+                dry_run or (enabled and owner == worker_id and awaiting_revision is None)
             )
-            if not automation_ready(status, dry_run=dry_run):
+            if not ready:
                 stop_capture()
-                next_state_poll_at = now + IDLE_STATE_POLL_INTERVAL
                 continue
-            next_state_poll_at = 0.0
+            if now < next_frame_at:
+                continue
+            next_frame_at = now + interval
             if frame_iterator is None:
                 frame_iterator = iter(source.frames())
             try:
@@ -266,6 +272,9 @@ def _run_worker_frames(
             try:
                 action = worker.process(frame, state)
             except RetryableWorkerError as exc:
+                if worker.journal.pending() is not None:
+                    awaiting_revision = revision
+                    stop_capture()
                 _log_transient_failure(
                     last_error_logs,
                     operation="process a vision frame",
@@ -276,8 +285,12 @@ def _run_worker_frames(
                 continue
             if action:
                 typer.echo(json.dumps(action, separators=(",", ":")))
+                if not dry_run:
+                    awaiting_revision = revision
+                    stop_capture()
     finally:
         stop_capture()
+        feed.close()
 
 
 @app.command()

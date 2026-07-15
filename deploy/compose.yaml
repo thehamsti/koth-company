@@ -1,0 +1,185 @@
+name: koth-company
+
+x-logging: &bounded-logging
+  driver: json-file
+  options:
+    max-size: 20m
+    max-file: "5"
+
+x-service-security: &service-security
+  init: true
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  cloudflared:
+    <<: *service-security
+    image: cloudflare/cloudflared:2026.7.1@sha256:188bb03589a32affed3cf4d0590565ffe67b78866e6b5582574afab2b705bafe
+    # Compose file-backed secrets retain host ownership; root reads the token while all capabilities stay dropped.
+    user: "0:0"
+    command:
+      - tunnel
+      - --no-autoupdate
+      - --metrics
+      - 127.0.0.1:20241
+      - run
+      - --token-file
+      - /run/secrets/cloudflare_tunnel_token
+      - --url
+      - http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 256m
+    pids_limit: 100
+    secrets:
+      - cloudflare_tunnel_token
+    healthcheck:
+      test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:20241", "ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - edge
+    logging: *bounded-logging
+
+  gateway:
+    <<: *service-security
+    image: caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    cpus: 0.25
+    mem_limit: 256m
+    pids_limit: 100
+    expose:
+      - "8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - edge
+      - app
+    logging: *bounded-logging
+
+  web:
+    <<: *service-security
+    image: ${KOTH_REGISTRY:-ghcr.io/thehamsti/koth-company}-web:${KOTH_RELEASE:?KOTH_RELEASE must be a full Git SHA}
+    env_file:
+      - ${KOTH_CONFIG_DIR:-/etc/koth-company}/web.env
+    environment:
+      HOSTNAME: 0.0.0.0
+      INTERNAL_API_URL: http://api:4000
+      NODE_ENV: production
+      PORT: 3000
+    restart: unless-stopped
+    stop_grace_period: 30s
+    cpus: 1.0
+    mem_limit: 2g
+    pids_limit: 256
+    expose:
+      - "3000"
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+      - /app/apps/web/.next/cache:size=256m,uid=1000,gid=1000,mode=0750
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app
+    logging: *bounded-logging
+
+  api:
+    <<: *service-security
+    image: ${KOTH_REGISTRY:-ghcr.io/thehamsti/koth-company}-api:${KOTH_RELEASE:?KOTH_RELEASE must be a full Git SHA}
+    env_file:
+      - ${KOTH_CONFIG_DIR:-/etc/koth-company}/api.env
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: 4000
+      NODE_ENV: production
+    restart: unless-stopped
+    stop_grace_period: 30s
+    cpus: 1.5
+    mem_limit: 1g
+    pids_limit: 256
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    expose:
+      - "4000"
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test:
+        - CMD
+        - bun
+        - -e
+        - fetch('http://127.0.0.1:4000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - app
+    logging: *bounded-logging
+
+  migrate:
+    <<: *service-security
+    image: ${KOTH_REGISTRY:-ghcr.io/thehamsti/koth-company}-migrate:${KOTH_RELEASE:?KOTH_RELEASE must be a full Git SHA}
+    profiles:
+      - tools
+    env_file:
+      - ${KOTH_CONFIG_DIR:-/etc/koth-company}/migrate.env
+    cpus: 1.0
+    mem_limit: 1g
+    pids_limit: 128
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 4096
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    networks:
+      - app
+    logging: *bounded-logging
+
+networks:
+  edge:
+    driver: bridge
+  app:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+secrets:
+  cloudflare_tunnel_token:
+    file: ${KOTH_CONFIG_DIR:-/etc/koth-company}/cloudflare-tunnel.token

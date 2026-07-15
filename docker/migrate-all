@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+
+bun /app/docker/migrate-payload.ts
+bun /app/docker/migrate-predictions.ts

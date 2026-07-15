@@ -1,0 +1,22 @@
+# syntax=docker/dockerfile:1.7
+
+FROM oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04 AS dependencies
+WORKDIR /opt/migrate
+COPY docker/migrate-runtime/package.json docker/migrate-runtime/bun.lock ./
+RUN bun install --frozen-lockfile --production
+
+FROM oven/bun:1.3.14-slim@sha256:d56a2534ffd262e92c12fd3249d3924d296d97086da773f821d7d0477435ea04 AS runtime
+ENV HOME=/tmp \
+    NODE_ENV=production
+WORKDIR /app
+COPY --from=dependencies --chown=bun:bun /opt/migrate/node_modules ./node_modules
+COPY --chown=bun:bun apps/web/src/migrations ./apps/web/src/migrations
+COPY --chown=bun:bun packages/predictions/db/migrations ./packages/predictions/db/migrations
+COPY --chown=bun:bun docker/migrate-payload.ts docker/migrate-predictions.ts docker/payload-migrate.config.ts ./docker/
+COPY --chown=bun:bun --chmod=0755 docker/migrate-all /usr/local/bin/migrate-all
+RUN DATABASE_URI=postgresql://validation:validation@database.invalid/validation \
+    PAYLOAD_SECRET=validation-secret-with-at-least-32-characters \
+    bun -e 'const config=await import("/app/docker/payload-migrate.config.ts");if(!config.default)process.exit(1)' \
+    && bun build /app/docker/migrate-predictions.ts --target=bun --outfile=/tmp/migrate-predictions.js
+USER bun
+ENTRYPOINT ["/usr/local/bin/migrate-all"]

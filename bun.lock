@@ -4,37 +4,71 @@
   "workspaces": {
     "": {
       "name": "hydramist-koth",
+      "devDependencies": {
+        "@types/bun": "latest",
+        "oxfmt": "latest",
+        "oxlint": "latest",
+        "typescript": "5.9.3",
+      },
+    },
+    "apps/api": {
+      "name": "@koth/api",
+      "version": "0.1.0",
       "dependencies": {
-        "@better-auth/drizzle-adapter": "^1.6.23",
+        "@koth/contracts": "workspace:*",
+        "@koth/predictions": "workspace:*",
+        "drizzle-orm": "0.45.2",
+      },
+    },
+    "apps/web": {
+      "name": "@koth/web",
+      "version": "0.1.0",
+      "dependencies": {
+        "@koth/contracts": "workspace:*",
         "@payloadcms/db-postgres": "3.86.0",
         "@payloadcms/next": "3.86.0",
         "@payloadcms/richtext-lexical": "3.86.0",
         "@payloadcms/ui": "3.86.0",
-        "@vercel/analytics": "^2.0.1",
-        "better-auth": "^1.6.23",
-        "decimal.js": "^10.6.0",
-        "drizzle-orm": "^0.45.2",
+        "@vercel/analytics": "2.0.1",
+        "better-auth": "1.6.23",
         "graphql": "16.11.0",
-        "next": "latest",
+        "next": "16.2.10",
         "payload": "3.86.0",
-        "postgres": "^3.4.9",
-        "react": "latest",
-        "react-dom": "latest",
+        "react": "19.2.7",
+        "react-dom": "19.2.7",
         "sharp": "0.34.5",
-        "zod": "^4.4.3",
       },
       "devDependencies": {
         "@testing-library/dom": "latest",
         "@testing-library/jest-dom": "latest",
         "@testing-library/react": "latest",
-        "@types/bun": "latest",
+        "@types/node": "latest",
         "@types/react": "latest",
         "@types/react-dom": "latest",
-        "drizzle-kit": "^0.31.10",
         "happy-dom": "latest",
-        "oxfmt": "latest",
-        "oxlint": "latest",
-        "typescript": "5.9.3",
+      },
+    },
+    "packages/contracts": {
+      "name": "@koth/contracts",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "4.4.3",
+      },
+    },
+    "packages/predictions": {
+      "name": "@koth/predictions",
+      "version": "0.1.0",
+      "dependencies": {
+        "@better-auth/drizzle-adapter": "1.6.23",
+        "@koth/contracts": "workspace:*",
+        "better-auth": "1.6.23",
+        "decimal.js": "10.6.0",
+        "drizzle-orm": "0.45.2",
+        "postgres": "3.4.9",
+        "zod": "4.4.3",
+      },
+      "devDependencies": {
+        "drizzle-kit": "0.31.10",
       },
     },
   },
@@ -254,6 +288,14 @@
     "@jridgewell/trace-mapping": ["@jridgewell/trace-mapping@0.3.31", "", { "dependencies": { "@jridgewell/resolve-uri": "^3.1.0", "@jridgewell/sourcemap-codec": "^1.4.14" } }, "sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw=="],
 
     "@jsdevtools/ono": ["@jsdevtools/ono@7.1.3", "", {}, "sha512-4JQNk+3mVzK3xh2rqd6RB4J46qUR19azEHBneZyTZM+c456qOrbbM/5xcR8huNCCcbVt7+UmizG6GuUvPvKUYg=="],
+
+    "@koth/api": ["@koth/api@workspace:apps/api"],
+
+    "@koth/contracts": ["@koth/contracts@workspace:packages/contracts"],
+
+    "@koth/predictions": ["@koth/predictions@workspace:packages/predictions"],
+
+    "@koth/web": ["@koth/web@workspace:apps/web"],
 
     "@lexical/clipboard": ["@lexical/clipboard@0.41.0", "", { "dependencies": { "@lexical/html": "0.41.0", "@lexical/list": "0.41.0", "@lexical/selection": "0.41.0", "@lexical/utils": "0.41.0", "lexical": "0.41.0" } }, "sha512-Ex5lPkb4NBBX1DCPzOAIeHBJFH1bJcmATjREaqpnTfxCbuOeQkt44wchezUA0oDl+iAxNZ3+pLLWiUju9icoSA=="],
 

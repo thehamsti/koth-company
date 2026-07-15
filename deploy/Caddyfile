@@ -1,0 +1,39 @@
+{
+	admin off
+	auto_https off
+	servers :8080 {
+		trusted_proxies static private_ranges
+		client_ip_headers CF-Connecting-IP X-Forwarded-For
+	}
+}
+
+:8080 {
+	@event_streams path /api/predictions/events /api/predictions/operator/events /api/predictions/automation/events
+	handle @event_streams {
+		header Cache-Control "no-store"
+		reverse_proxy api:4000 {
+			flush_interval -1
+			header_up X-Forwarded-Proto https
+		}
+	}
+
+	@backend {
+		path /api/auth /api/auth/* /api/health/live /api/health/ready /api/predictions /api/predictions/* /api/twitch /api/twitch/*
+	}
+
+	handle @backend {
+		header Cache-Control "no-store"
+		reverse_proxy api:4000 {
+			header_up X-Forwarded-Proto https
+		}
+	}
+
+	@dynamic path /admin /admin/* /predictions /predictions/*
+	header @dynamic Cache-Control "no-store"
+
+	handle {
+		reverse_proxy web:3000 {
+			header_up X-Forwarded-Proto https
+		}
+	}
+}

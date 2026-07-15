@@ -6,8 +6,8 @@ and rewards are enabled only while an event is live.
 
 ## Twitch application
 
-1. Use a Twitch application owned by the KOTH operator. The broadcaster must be a Twitch Affiliate
-   or Partner to use custom rewards.
+1. Reuse the existing Twitch application owned by the KOTH operator. Do not create a second app for
+   the self-hosted API. The broadcaster must be a Twitch Affiliate or Partner to use custom rewards.
 2. Add this exact OAuth redirect URL in the Twitch developer console for each environment:
 
    ```text
@@ -22,7 +22,7 @@ Twitch application through Better Auth.
 
 ## Environment
 
-Set these values in the deployed application:
+Set these values in the API environment:
 
 ```dotenv
 BETTER_AUTH_URL=https://your-domain.com
@@ -31,6 +31,7 @@ TWITCH_CLIENT_SECRET=...
 TWITCH_BROADCASTER_LOGIN=hydramist
 TWITCH_EVENTSUB_SECRET=...
 TWITCH_EVENTSUB_CALLBACK_URL=https://your-domain.com/api/twitch/eventsub
+TWITCH_HTTP_TIMEOUT_MS=10000
 CHANNEL_POINTS_TO_CROWNS_RATE=1000
 CHANNEL_POINTS_MAX_PER_USER_PER_EVENT=10000
 ```
@@ -40,18 +41,30 @@ is appropriate. The callback must be publicly reachable over HTTPS on port 443. 
 values, rewards cost 1,000 points per Crown and each viewer can convert at most 10,000 points per
 event, so the generated rewards are 1 Crown and 10 Crowns.
 
-`PREDICTION_DATABASE_URI` is optional when `DATABASE_URI` points at the intended prediction database.
+`TWITCH_HTTP_TIMEOUT_MS` bounds OAuth and Helix calls. Keep it at 10 seconds unless the network path
+requires a higher value; the API rejects values above 30 seconds.
+
+`PREDICTION_DATABASE_URI` is required in the separated API deployment. Keep `BETTER_AUTH_URL`, the
+OAuth redirect, and the EventSub callback on the public apex even while validating the temporary
+`origin.koth.company` hostname.
 
 ## Bring-up
 
-1. Deploy the application and run `bun run predictions:migrate` against the deployed database.
-2. Sign into `/predictions` with the operator's Twitch account and grant it prediction admin access
-   with `bun run predictions:grant-admin -- operator@example.com` if needed.
+1. Deploy the application; the manual deployment runner applies Payload and prediction migrations.
+2. Sign into `/predictions` once with the operator's Twitch account, then grant access by Twitch
+   identity. For a local checkout, run
+   `bun run predictions:grant-admin -- --twitch-login hydramist`. On `hamsti1`, run the exact bundled
+   `/app/grant-admin.js --twitch-login hydramist` command documented in `deploy/README.md`.
 3. Open `/predictions/control`, expand **Twitch channel points**, and select **Connect broadcaster**.
    Authorize the account named by `TWITCH_BROADCASTER_LOGIN`.
 4. Select **Sync rewards**, then **Sync webhook**. Both operations are safe to rerun. Webhook sync
    replaces the existing subscription so a changed callback secret takes effect.
 5. Activate an event. The rewards become visible on Twitch. Completing the event disables them.
+
+Before apex cutover, deployment verifies a correctly signed EventSub challenge locally and verifies
+anonymous health and public SSE through `origin.koth.company`. Perform Twitch OAuth and a real
+EventSub subscription sync only against `https://koth.company`, because Twitch validates the exact
+registered production URLs.
 
 Viewers must sign into `/predictions` with Twitch before redeeming. Unknown KOTH users, out-of-sync
 reward costs, redemptions above the event cap, and redemptions made without a live event are refunded

@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=deploy/ops/common.sh
+source "$SCRIPT_DIR/common.sh"
+
+require_layout
+current="$(read_release current || true)"
+previous="$(read_release previous || true)"
+require_full_sha "$current"
+export KOTH_RELEASE="$current"
+
+printf 'current:  %s\n' "$current"
+printf 'previous: %s\n' "${previous:-none}"
+printf 'bundle:   %s\n' "$(tr -d '[:space:]' <"$DEPLOYMENT_RELEASE_FILE")"
+printf 'markets:  %s\n' "$(env_value "$KOTH_CONFIG_DIR/api.env" PREDICTION_MARKETS_ENABLED)"
+printf 'origin:   %s\n' "$(env_value "$DEPLOY_ENV" KOTH_PUBLIC_ORIGIN)"
+compose ps
+verify_stack
+printf 'status: healthy\n'
