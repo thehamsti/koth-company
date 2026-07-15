@@ -4,29 +4,50 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "next dev -p 3002",
+    "build": "next build",
+    "cms:generate": "payload generate:types && payload generate:importmap",
+    "cms:migrate": "payload migrate",
+    "cms:migration:create": "payload migrate:create",
+    "predictions:migrate": "bun --env-file=.env.local run drizzle-kit migrate",
+    "predictions:generate": "drizzle-kit generate",
+    "predictions:grant-admin": "bun scripts/grant-prediction-admin.ts",
+    "start": "next start -p 3002",
     "test": "bun test",
-    "lint": "oxlint src vite.config.ts",
+    "lint": "oxlint app src next.config.ts payload.config.ts --ignore-pattern 'src/migrations/**'",
     "format": "oxfmt .",
     "format:check": "oxfmt --check .",
-    "typecheck": "tsc -b --pretty false"
+    "typecheck": "tsc --noEmit --pretty false"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
+    "@better-auth/drizzle-adapter": "^1.6.23",
+    "@payloadcms/db-postgres": "3.86.0",
+    "@payloadcms/next": "3.86.0",
+    "@payloadcms/richtext-lexical": "3.86.0",
+    "@payloadcms/ui": "3.86.0",
+    "better-auth": "^1.6.23",
+    "decimal.js": "^10.6.0",
+    "drizzle-orm": "^0.45.2",
+    "graphql": "16.11.0",
+    "next": "latest",
+    "payload": "3.86.0",
+    "postgres": "^3.4.9",
     "react": "latest",
     "react-dom": "latest",
-    "typescript": "latest",
-    "vite": "latest"
+    "sharp": "0.34.5",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@testing-library/dom": "latest",
     "@testing-library/jest-dom": "latest",
     "@testing-library/react": "latest",
     "@types/bun": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
+    "drizzle-kit": "^0.31.10",
     "happy-dom": "latest",
     "oxfmt": "latest",
-    "oxlint": "latest"
+    "oxlint": "latest",
+    "typescript": "5.9.3"
   }
 }

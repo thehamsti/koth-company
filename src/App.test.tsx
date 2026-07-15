@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
 import { App } from "./App";
+import { defaultTournamentContent } from "./content";
 
 describe("KOTH site", () => {
   test("shows tournament mechanics and sponsor destinations", () => {
@@ -19,5 +20,23 @@ describe("KOTH site", () => {
     for (const link of screen.getAllByRole("link", { name: /donate/i })) {
       expect(link.getAttribute("href")).toBe("https://streamlabs.com/hydramist");
     }
+  });
+
+  test("renders CMS-managed event labels and leaderboard entries", () => {
+    render(
+      <App
+        content={{
+          ...defaultTournamentContent,
+          expansion: "WotLK",
+          season: 4,
+          week: 7,
+        }}
+        leaderboardEntries={[{ name: "Hydra", wins: 6 }]}
+      />,
+    );
+
+    expect(screen.getByText("WotLK Season 4 · Week 7")).toBeTruthy();
+    expect(screen.getByText("Hydra")).toBeTruthy();
+    expect(screen.getByText("6 wins")).toBeTruthy();
   });
 });

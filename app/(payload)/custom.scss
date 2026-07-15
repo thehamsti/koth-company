@@ -1,0 +1,231 @@
+:root {
+  --theme-elevation-0: #0a0c0c;
+  --theme-elevation-50: #101414;
+  --theme-elevation-100: #171b1b;
+  --theme-elevation-150: #1d2222;
+  --theme-elevation-200: #282c2b;
+  --theme-elevation-250: #333631;
+  --theme-elevation-300: #45443c;
+  --theme-elevation-500: #8f8778;
+  --theme-elevation-800: #e9dfc8;
+  --theme-elevation-1000: #fff8e8;
+  --theme-success-500: #35b8d0;
+  --theme-error-500: #ff6840;
+}
+
+body {
+  background: radial-gradient(circle at 75% 0%, rgb(53 184 208 / 8%), transparent 28rem), #0a0c0c;
+}
+
+.template-default,
+.template-minimal {
+  --style-radius-s: 2px;
+  --style-radius-m: 3px;
+  --style-radius-l: 4px;
+}
+
+.template-minimal {
+  background:
+    linear-gradient(90deg, rgb(8 10 10 / 98%) 0 56%, rgb(8 10 10 / 68%) 76%, rgb(8 10 10 / 32%)),
+    url("/assets/arena-gates.png") center / cover;
+}
+
+.koth-admin-welcome {
+  max-width: 480px;
+  margin-bottom: 32px;
+  padding-bottom: 28px;
+  border-bottom: 1px solid #51402e;
+}
+
+.koth-admin-welcome > span {
+  display: block;
+  margin-bottom: 12px;
+  color: #ff6840;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.koth-admin-welcome > strong {
+  display: block;
+  color: #fff8e8;
+  font-size: clamp(32px, 4vw, 52px);
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+}
+
+.koth-admin-welcome > p {
+  margin: 14px 0 0;
+  color: #a9a091;
+  line-height: 1.55;
+}
+
+.nav {
+  border-right: 1px solid #3f3427;
+  background: linear-gradient(180deg, #0c0e0e, #111313);
+}
+
+.nav__link:hover,
+.nav__link.active {
+  color: #fff8e8;
+  background: rgb(215 70 34 / 14%);
+}
+
+.koth-brand-icon,
+.koth-brand-logo > span {
+  display: grid;
+  place-items: center;
+  color: #fff8e8;
+  background: linear-gradient(145deg, #db4a26, #6f1e12);
+  border: 1px solid #f06a45;
+  font-family: Impact, sans-serif;
+}
+
+.koth-brand-icon {
+  width: 28px;
+  height: 28px;
+}
+
+.koth-brand-logo {
+  display: grid;
+  grid-template-columns: 42px auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 12px;
+  color: #e9dfc8;
+  text-transform: uppercase;
+}
+
+.koth-brand-logo > span {
+  grid-row: 1 / -1;
+  width: 42px;
+  height: 42px;
+}
+
+.koth-brand-logo strong {
+  font-size: 22px;
+  line-height: 1;
+  letter-spacing: 0.08em;
+}
+
+.koth-brand-logo small {
+  color: #8f8778;
+  font-size: 9px;
+  letter-spacing: 0.16em;
+}
+
+.koth-dashboard {
+  margin-bottom: 48px;
+  color: #e9dfc8;
+}
+
+.koth-dashboard__eyebrow {
+  margin-bottom: 12px;
+  color: #ff6840;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.koth-dashboard__hero {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 32px;
+  padding: 42px;
+  border: 1px solid #51402e;
+  background:
+    linear-gradient(100deg, rgb(10 12 12 / 95%), rgb(11 27 30 / 88%)),
+    url("/assets/arena-gates.png") center 42% / cover;
+}
+
+.koth-dashboard__hero h1 {
+  margin: 0 0 10px;
+  color: #fff8e8;
+  font-size: clamp(36px, 5vw, 70px);
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+}
+
+.koth-dashboard__hero p {
+  max-width: 680px;
+  margin: 0;
+  color: #bdb4a4;
+  line-height: 1.6;
+}
+
+.koth-dashboard__hero > a {
+  flex: none;
+  padding: 12px 16px;
+  color: #fff8e8;
+  border: 1px solid #d74622;
+  background: #a4301a;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  text-transform: uppercase;
+}
+
+.koth-dashboard__actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border: 1px solid #37332c;
+  border-top: 0;
+}
+
+.koth-dashboard__actions a {
+  display: grid;
+  min-height: 150px;
+  padding: 24px;
+  color: inherit;
+  border-right: 1px solid #37332c;
+  text-decoration: none;
+  transition: background-color 160ms ease;
+}
+
+.koth-dashboard__actions a:last-child {
+  border-right: 0;
+}
+
+.koth-dashboard__actions a:hover {
+  background: rgb(53 184 208 / 8%);
+}
+
+.koth-dashboard__actions span {
+  color: #35b8d0;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+
+.koth-dashboard__actions strong {
+  align-self: end;
+  font-size: 18px;
+}
+
+.koth-dashboard__actions small {
+  margin-top: 6px;
+  color: #8f8778;
+  line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+  .koth-dashboard__hero {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 28px;
+  }
+
+  .koth-dashboard__actions {
+    grid-template-columns: 1fr;
+  }
+
+  .koth-dashboard__actions a {
+    min-height: 120px;
+    border-right: 0;
+    border-bottom: 1px solid #37332c;
+  }
+}

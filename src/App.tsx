@@ -1,7 +1,11 @@
-import { leaderboardEntries, rankLeaderboard } from "./leaderboard";
-
-const twitchUrl = "https://www.twitch.tv/hydramist";
-const donationUrl = "https://streamlabs.com/hydramist";
+import Image from "next/image";
+import Link from "next/link";
+import { defaultTournamentContent, type TournamentContent } from "./content";
+import {
+  leaderboardEntries as defaultLeaderboardEntries,
+  type LeaderboardEntry,
+  rankLeaderboard,
+} from "./leaderboard";
 
 function ExternalLink({
   href,
@@ -22,13 +26,13 @@ function ExternalLink({
 function BrandMark() {
   return (
     <span className="brand">
-      <img src="/assets/hydramist-mark.png" alt="" />
+      <Image src="/assets/hydramist-mark.png" alt="" width={44} height={44} />
       <strong>KOTH</strong>
     </span>
   );
 }
 
-function Leaderboard() {
+function Leaderboard({ leaderboardEntries }: { leaderboardEntries: readonly LeaderboardEntry[] }) {
   const entries = rankLeaderboard(leaderboardEntries);
   return (
     <section className="section leaderboard" id="leaderboard">
@@ -60,7 +64,13 @@ function Leaderboard() {
   );
 }
 
-export function App() {
+export function App({
+  content = defaultTournamentContent,
+  leaderboardEntries = defaultLeaderboardEntries,
+}: {
+  content?: TournamentContent;
+  leaderboardEntries?: readonly LeaderboardEntry[];
+}) {
   return (
     <main>
       <header className="site-header">
@@ -71,9 +81,10 @@ export function App() {
           <a href="#rules">Rules</a>
           <a href="#powerups">Power-ups</a>
           <a href="#leaderboard">Leaderboard</a>
+          <Link href="/predictions">Predictions</Link>
           <a href="#sponsors">Sponsors</a>
         </nav>
-        <ExternalLink href={twitchUrl} className="button button-small">
+        <ExternalLink href={content.twitchUrl} className="button button-small">
           <span className="live-dot" />
           Watch Hydramist
         </ExternalLink>
@@ -86,10 +97,12 @@ export function App() {
             <small>of the</small>
             <span>Hill</span>
           </h1>
-          <p className="season">TBC Season 2 · Week 1</p>
-          <p className="slogan">Win. Stay. Climb.</p>
+          <p className="season">
+            {content.expansion} Season {content.season} · Week {content.week}
+          </p>
+          <p className="slogan">{content.heroSlogan}</p>
           <div className="hero-actions">
-            <ExternalLink href={twitchUrl} className="button">
+            <ExternalLink href={content.twitchUrl} className="button">
               Watch live on Twitch
             </ExternalLink>
             <a className="button button-secondary" href="#signup">
@@ -97,8 +110,9 @@ export function App() {
             </a>
           </div>
           <p className="signup" id="signup">
-            Whisper <strong>Hydramon-Spineshatter</strong> (Horde) or{" "}
-            <strong>hydraa-Spineshatter</strong> (Alliance) with <code>!koth</code>
+            Whisper <strong>{content.hordeCharacter}</strong> (Horde) or{" "}
+            <strong>{content.allianceCharacter}</strong> (Alliance) with{" "}
+            <code>{content.signupCommand}</code>
           </p>
         </div>
         <a href="#rules" className="scroll-cue" aria-label="Read the tournament rules">
@@ -118,30 +132,16 @@ export function App() {
             </h2>
           </div>
           <ol className="rule-rail">
-            <li>
-              <span>1</span>
-              <p>
-                <strong>Rank 1 players:</strong> Gladiator cutoff rating minimum.
-              </p>
-            </li>
-            <li>
-              <span>2</span>
-              <p>
-                <strong>All other players:</strong> within 150 rating of your season high.
-              </p>
-            </li>
-            <li>
-              <span>3</span>
-              <p>Play until you lose. Your best streak lands on the leaderboard.</p>
-            </li>
-            <li>
-              <span>4</span>
-              <p>The top score wins the donation pool.</p>
-            </li>
+            {content.rules.map((rule, index) => (
+              <li key={rule}>
+                <span>{index + 1}</span>
+                <p>{rule}</p>
+              </li>
+            ))}
           </ol>
         </div>
       </section>
-      <Leaderboard />
+      <Leaderboard leaderboardEntries={leaderboardEntries} />
       <section className="section powerups" id="powerups">
         <div className="section-shell">
           <div className="center-heading">
@@ -152,10 +152,7 @@ export function App() {
               <span className="rune">✦</span>
               <div>
                 <h3>Soulstone · SS</h3>
-                <p>
-                  Type <strong>SS</strong> in party chat within 15 seconds after the gates open. If
-                  you lose, you stay in.
-                </p>
+                <p>{content.soulstoneText}</p>
                 <em>Once per player.</em>
               </div>
             </article>
@@ -163,10 +160,7 @@ export function App() {
             <article className="power power-red">
               <div>
                 <h3>Bloodlust · BL</h3>
-                <p>
-                  Type <strong>BL</strong> in party chat within 15 seconds after the gates open. Win
-                  before Eyes spawn and it counts as two wins.
-                </p>
+                <p>{content.bloodlustText}</p>
                 <em>Once per player.</em>
               </div>
               <span className="rune">⚑</span>
@@ -177,21 +171,18 @@ export function App() {
             <div className="viewer-actions">
               <article>
                 <h3>
-                  Resurrect <b>$5 × current wins</b>
+                  Resurrect <b>{content.resurrectionPrice}</b>
                 </h3>
-                <p>
-                  Resurrect an eliminated contestant within two minutes. Maximum once per
-                  contestant.
-                </p>
+                <p>{content.resurrectionText}</p>
               </article>
               <article>
                 <h3>
-                  Shuffle queue <b>$30</b>
+                  Shuffle queue <b>{content.shufflePrice}</b>
                 </h3>
-                <p>Randomize the queue order.</p>
+                <p>{content.shuffleText}</p>
               </article>
             </div>
-            <ExternalLink href={donationUrl} className="donate">
+            <ExternalLink href={content.donationUrl} className="donate">
               Donate directly to the prize pool
             </ExternalLink>
           </div>
@@ -205,21 +196,34 @@ export function App() {
           </div>
           <div className="sponsor-grid">
             <ExternalLink href="https://www.restedxp.com/ref/Hydramist/" className="sponsor-card">
-              <img
+              <Image
                 src="/assets/restedxp.png"
                 alt="RestedXP premium leveling guides — get 10% off"
+                width={320}
+                height={365}
+                loading="eager"
               />
               <span>RestedXP</span>
             </ExternalLink>
             <ExternalLink href="https://uk.weareholy.com/hydra" className="sponsor-card holy">
-              <img src="/assets/holy.png" alt="HOLY starter set promotion with Hydramist codes" />
+              <Image
+                src="/assets/holy.png"
+                alt="HOLY starter set promotion with Hydramist codes"
+                width={320}
+                height={550}
+                loading="eager"
+              />
               <span>HOLY</span>
             </ExternalLink>
             <div className="hamsti">
-              <img src="/assets/hydramist-mark.png" alt="" />
-              <p>
-                KOTH is sponsored by <strong>Hamsti.</strong>
-              </p>
+              <Image
+                src="/assets/hydramist-mark.png"
+                alt=""
+                width={130}
+                height={130}
+                loading="eager"
+              />
+              <p>{content.sponsorCredit}</p>
             </div>
           </div>
         </div>
@@ -228,15 +232,17 @@ export function App() {
         <div>
           <h2>Enter the arena</h2>
           <div className="footer-actions">
-            <ExternalLink href={donationUrl} className="button">
+            <ExternalLink href={content.donationUrl} className="button">
               Donate via Streamlabs
             </ExternalLink>
-            <ExternalLink href={twitchUrl} className="button button-secondary">
+            <ExternalLink href={content.twitchUrl} className="button button-secondary">
               Open Hydramist on Twitch
             </ExternalLink>
           </div>
         </div>
-        <p>Hydramist King of the Hill · TBC Season 2</p>
+        <p>
+          Hydramist King of the Hill · {content.expansion} Season {content.season}
+        </p>
       </footer>
     </main>
   );

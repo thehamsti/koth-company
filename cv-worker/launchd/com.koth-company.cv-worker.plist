@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.koth-company.cv-worker</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>__RUNNER_PATH__</string>
+		<string>__UV_PATH__</string>
+	</array>
+	<key>WorkingDirectory</key>
+	<string>__WORKER_DIRECTORY__</string>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Background</string>
+	<key>ThrottleInterval</key>
+	<integer>15</integer>
+	<key>StandardOutPath</key>
+	<string>__STDOUT_PATH__</string>
+	<key>StandardErrorPath</key>
+	<string>__STDERR_PATH__</string>
+</dict>
+</plist>

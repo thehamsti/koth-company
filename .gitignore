@@ -1,0 +1,14 @@
+.next/
+node_modules/
+dist/
+*.tsbuildinfo
+.env*
+!.env.example
+cv-worker/.uv-cache/
+cv-worker/.venv/
+cv-worker/.pytest_cache/
+cv-worker/.ruff_cache/
+cv-worker/runtime/
+__pycache__/
+*.pyc
+.vercel
