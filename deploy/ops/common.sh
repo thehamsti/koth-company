@@ -327,10 +327,11 @@ run_migrations() {
   local exit_code
 
   docker rm --force "$container_name" >/dev/null 2>&1 || true
-  set +e
-  compose_timed 10m --profile tools run --name "$container_name" --rm --no-deps migrate
-  exit_code=$?
-  set -e
+  if compose_timed 10m --profile tools run --name "$container_name" --rm --no-deps migrate; then
+    exit_code=0
+  else
+    exit_code=$?
+  fi
 
   if ((exit_code != 0)); then
     docker rm --force "$container_name" >/dev/null 2>&1 || true
@@ -382,8 +383,7 @@ verify_external_origin() {
 
   headers="$(mktemp)"
   body="$(mktemp)"
-  set +e
-  curl \
+  if curl \
     --fail \
     --silent \
     --show-error \
@@ -392,9 +392,11 @@ verify_external_origin() {
     --header 'Accept: text/event-stream' \
     --dump-header "$headers" \
     --output "$body" \
-    "$origin/api/predictions/events"
-  curl_exit=$?
-  set -e
+    "$origin/api/predictions/events"; then
+    curl_exit=0
+  else
+    curl_exit=$?
+  fi
   if [[ "$curl_exit" != "0" && "$curl_exit" != "28" ]]; then
     rm -f "$headers" "$body"
     die "external SSE request failed with curl exit $curl_exit"

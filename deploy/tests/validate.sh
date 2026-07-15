@@ -146,6 +146,43 @@ if [[ "$(env_value "$ROOT/deploy/env/deploy.env.example" KOTH_PUBLIC_ORIGIN)" !=
   exit 1
 fi
 
+cat >"$TEMP_DIR/sse-deploy.env" <<'EOF'
+KOTH_PUBLIC_ORIGIN=https://koth.company
+EOF
+(
+  DEPLOY_ENV="$TEMP_DIR/sse-deploy.env"
+  curl() {
+    local body=""
+    local headers=""
+    while (($# > 0)); do
+      case "$1" in
+        --dump-header)
+          headers="$2"
+          shift 2
+          ;;
+        --output)
+          body="$2"
+          shift 2
+          ;;
+        *) shift ;;
+      esac
+    done
+    if [[ -z "$headers" ]]; then
+      return 0
+    fi
+    printf 'HTTP/2 200\r\ncontent-type: text/event-stream\r\n\r\n' >"$headers"
+    printf 'event: stream.ready\ndata: {}\n\n' >"$body"
+    return 28
+  }
+  trap ': >"$TEMP_DIR/sse-err-trap"' ERR
+  verify_external_origin
+  trap - ERR
+)
+if [[ -e "$TEMP_DIR/sse-err-trap" ]]; then
+  printf 'an expected SSE timeout must not trigger deployment rollback\n' >&2
+  exit 1
+fi
+
 sed -n '/^  cloudflared:/,/^  gateway:/p' "$ROOT/deploy/compose.yaml" >"$TEMP_DIR/cloudflared-compose.yaml"
 for argument in '--token-file' '/run/secrets/cloudflare_tunnel_token' '--url' 'http://gateway:8080' 'cloudflare_secret:/run/secrets:ro'; do
   if ! grep -Fqx -- "      - $argument" "$TEMP_DIR/cloudflared-compose.yaml"; then
