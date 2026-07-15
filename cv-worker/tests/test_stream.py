@@ -13,7 +13,10 @@ class OfflineSource(TwitchSource):
         raise RuntimeError("offline")
 
 
-def test_single_frame_capture_fails_immediately_when_channel_is_offline() -> None:
+def test_single_frame_capture_fails_immediately_when_channel_is_offline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("koth_cv.stream.shutil.which", lambda _name: "/usr/bin/ffmpeg")
     with pytest.raises(RuntimeError, match="offline"):
         OfflineSource("hydramist").capture()
 

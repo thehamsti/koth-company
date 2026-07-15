@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from click import unstyle
 from typer.testing import CliRunner
 
 from koth_cv import cli
@@ -259,7 +260,8 @@ def test_run_rejects_takeover_in_dry_run() -> None:
     result = CliRunner().invoke(cli.app, ["run", "--dry-run", "--takeover"])
 
     assert result.exit_code == 2
-    assert "--takeover cannot be used with --dry-run" in result.output
+    output = " ".join(unstyle(result.output).split())
+    assert "--takeover cannot be used with --dry-run" in output
 
 
 def test_loop_reconciles_lost_pause_response_before_paused_readiness(tmp_path: Path) -> None:
