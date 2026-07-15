@@ -18,7 +18,7 @@ services:
   cloudflared:
     <<: *service-security
     image: cloudflare/cloudflared:2026.7.1@sha256:188bb03589a32affed3cf4d0590565ffe67b78866e6b5582574afab2b705bafe
-    # Compose file-backed secrets retain host ownership; root reads the token while all capabilities stay dropped.
+    # The capability-free root user owns the mode-0600 token inside the private volume.
     user: "0:0"
     command:
       - tunnel
@@ -37,8 +37,8 @@ services:
     cpus: 0.25
     mem_limit: 256m
     pids_limit: 100
-    secrets:
-      - cloudflare_tunnel_token
+    volumes:
+      - cloudflare_secret:/run/secrets:ro
     healthcheck:
       test: ["CMD", "cloudflared", "tunnel", "--metrics", "127.0.0.1:20241", "ready"]
       interval: 15s
@@ -182,7 +182,6 @@ networks:
 volumes:
   caddy_data:
   caddy_config:
-
-secrets:
-  cloudflare_tunnel_token:
-    file: ${KOTH_CONFIG_DIR:-/etc/koth-company}/cloudflare-tunnel.token
+  cloudflare_secret:
+    external: true
+    name: koth-company_cloudflare_secret

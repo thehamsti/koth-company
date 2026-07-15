@@ -17,6 +17,15 @@ if (require_full_sha not-a-sha >/dev/null 2>&1); then
   exit 1
 fi
 
+printf ':8080 { respond "ok" }\n' >"$TEMP_DIR/Caddyfile"
+chmod 0644 "$TEMP_DIR/Caddyfile"
+require_file_mode "$TEMP_DIR/Caddyfile" 644
+chmod 0600 "$TEMP_DIR/Caddyfile"
+if (require_file_mode "$TEMP_DIR/Caddyfile" 644 >/dev/null 2>&1); then
+  printf 'rootless bind-mounted configuration must reject an unreadable mode\n' >&2
+  exit 1
+fi
+
 printf '0000000000000000000000000000000000000000\n' >"$TEMP_DIR/deployment-release"
 (
   DEPLOYMENT_RELEASE_FILE="$TEMP_DIR/deployment-release"
@@ -69,6 +78,15 @@ fi
 if ! grep -Fq 'max: 5' "$ROOT/apps/web/payload.config.ts" ||
   ! grep -Fq 'max: 2' "$ROOT/apps/web/scripts/migrate.config.ts"; then
   printf 'Payload pools must leave a client available beyond the reconnect monitor\n' >&2
+  exit 1
+fi
+
+if ! grep -Fq 'BUN_OPTIONS=--no-install' "$ROOT/docker/Dockerfile.api"; then
+  printf 'the read-only API image must disable Bun runtime package installation\n' >&2
+  exit 1
+fi
+if ! grep -Fq 'http://gateway:8080/api/auth/get-session' "$ROOT/deploy/ops/common.sh"; then
+  printf 'release verification must exercise the Better Auth runtime path\n' >&2
   exit 1
 fi
 
@@ -129,12 +147,32 @@ if [[ "$(env_value "$ROOT/deploy/env/deploy.env.example" KOTH_PUBLIC_ORIGIN)" !=
 fi
 
 sed -n '/^  cloudflared:/,/^  gateway:/p' "$ROOT/deploy/compose.yaml" >"$TEMP_DIR/cloudflared-compose.yaml"
-for argument in '--token-file' '/run/secrets/cloudflare_tunnel_token' '--url' 'http://gateway:8080'; do
+for argument in '--token-file' '/run/secrets/cloudflare_tunnel_token' '--url' 'http://gateway:8080' 'cloudflare_secret:/run/secrets:ro'; do
   if ! grep -Fqx -- "      - $argument" "$TEMP_DIR/cloudflared-compose.yaml"; then
     printf 'cloudflared must use its token file and explicit gateway origin: missing %s\n' "$argument" >&2
     exit 1
   fi
 done
+
+gateway_image="$(sed -n '/^  gateway:/,/^  web:/p' "$ROOT/deploy/compose.yaml" | sed -n 's/^    image: //p')"
+installer_image="$(sed -n 's/^CLOUDFLARE_SECRET_INSTALLER_IMAGE="\([^"]*\)"/\1/p' "$ROOT/deploy/ops/common.sh")"
+if [[ -z "$gateway_image" || "$gateway_image" != "$installer_image" ]]; then
+  printf 'the tunnel token installer image must match the pinned gateway image\n' >&2
+  exit 1
+fi
+
+if ! grep -Fq 'name: koth-company_cloudflare_secret' "$ROOT/deploy/compose.yaml" ||
+  ! grep -Fq 'cat >"$temporary"' "$ROOT/deploy/ops/common.sh" ||
+  ! grep -Fq 'head -c 1 /run/secrets/cloudflare_tunnel_token' "$ROOT/deploy/ops/common.sh" ||
+  ! grep -Fq 'mv -f "$temporary" /run/secrets/cloudflare_tunnel_token' "$ROOT/deploy/ops/common.sh"; then
+  printf 'the tunnel token must be atomically installed and read-verified in its Docker volume\n' >&2
+  exit 1
+fi
+
+if ! grep -Fq 'compose up --detach --remove-orphans --force-recreate' "$ROOT/deploy/ops/common.sh"; then
+  printf 'runtime containers must be recreated so tunnel token rotations take effect\n' >&2
+  exit 1
+fi
 
 if grep -q 'compose pull web api' "$ROOT/deploy/ops/rollback"; then
   printf 'rollback must not pull retained images unconditionally\n' >&2

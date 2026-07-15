@@ -31,7 +31,7 @@ From the extracted `koth-company-$SHA` directory on `hamsti1`:
 sudo install -d -m 0750 /srv/koth-company/ops /srv/koth-company/releases /etc/koth-company
 sudo install -m 0640 RELEASE /srv/koth-company/deployment-release
 sudo install -m 0640 deploy/compose.yaml /srv/koth-company/compose.yaml
-sudo install -m 0640 deploy/Caddyfile /srv/koth-company/Caddyfile
+sudo install -m 0644 deploy/Caddyfile /srv/koth-company/Caddyfile
 sudo install -m 0750 deploy/ops/common.sh deploy/ops/deploy deploy/ops/rollback deploy/ops/status /srv/koth-company/ops/
 sudo install -m 0640 deploy/env/deploy.env.example /srv/koth-company/deploy.env
 sudo install -m 0640 deploy/env/web.env.example /etc/koth-company/web.env
@@ -52,7 +52,8 @@ KOTH_ROOT="$KOTH_ROOT" KOTH_CONFIG_DIR="$KOTH_CONFIG_DIR" \
 ```
 
 Keep environment files and the tunnel token mode `0600` in a user-owned install. Do not use this
-variant for an account shared with untrusted shell users.
+variant for an account shared with untrusted shell users. Install `Caddyfile` mode `0644`; it contains
+no secrets, and rootless Docker requires that read bit for the bind mount.
 
 Repeat the `deployment-release`, Compose, Caddy, and operations-script installs from each new SHA bundle before deploying that SHA. Preserve the configured environment and token files. The deploy runner rejects a release whose installed bundle marker names a different commit.
 
@@ -121,7 +122,7 @@ ssh hamsti1 'rm -f /tmp/koth-company-cloudflare-tunnel.token'
 rm -f cloudflare-tunnel.token
 ```
 
-Do not add the token to an environment file. Both bridge networks allow required outbound database and Twitch traffic, but no service is reachable from a host or internet port.
+Do not add the token to an environment file. At start, the operations script streams this private host file into a dedicated Docker volume with an atomic mode-0600 replacement so userns-remapped containers can read it without weakening the host file mode. Both bridge networks allow required outbound database and Twitch traffic, but no service is reachable from a host or internet port.
 
 ## First deployment and production-host verification
 

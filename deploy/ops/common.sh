@@ -4,9 +4,12 @@ set -Eeuo pipefail
 KOTH_ROOT="${KOTH_ROOT:-/srv/koth-company}"
 KOTH_CONFIG_DIR="${KOTH_CONFIG_DIR:-/etc/koth-company}"
 COMPOSE_FILE="${KOTH_ROOT}/compose.yaml"
+CADDY_FILE="${KOTH_ROOT}/Caddyfile"
 DEPLOY_ENV="${KOTH_ROOT}/deploy.env"
 RELEASES_DIR="${KOTH_ROOT}/releases"
 DEPLOYMENT_RELEASE_FILE="${KOTH_ROOT}/deployment-release"
+CLOUDFLARE_SECRET_VOLUME="koth-company_cloudflare_secret"
+CLOUDFLARE_SECRET_INSTALLER_IMAGE="caddy:2.11.4-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
 
 die() {
   printf 'error: %s\n' "$*" >&2
@@ -183,8 +186,28 @@ require_not_world_accessible() {
   local file="$1"
   local mode
 
-  mode="$(stat -c '%a' "$file")"
+  mode="$(file_mode "$file")"
   ((10#${mode: -1} == 0)) || die "$file must not be accessible to other users"
+}
+
+file_mode() {
+  local file="$1"
+  local mode
+
+  if mode="$(stat -c '%a' "$file" 2>/dev/null)"; then
+    printf '%s' "$mode"
+    return
+  fi
+  stat -f '%Lp' "$file"
+}
+
+require_file_mode() {
+  local file="$1"
+  local expected="$2"
+  local actual
+
+  actual="$(file_mode "$file")"
+  [[ "$actual" == "$expected" ]] || die "$file must have mode $expected, found $actual"
 }
 
 require_layout() {
@@ -193,6 +216,7 @@ require_layout() {
   require_command flock
   require_command timeout
   [[ -f "$COMPOSE_FILE" ]] || die "missing $COMPOSE_FILE"
+  [[ -f "$CADDY_FILE" ]] || die "missing $CADDY_FILE"
   [[ -f "$DEPLOY_ENV" ]] || die "missing $DEPLOY_ENV"
   [[ -f "$DEPLOYMENT_RELEASE_FILE" ]] || die "missing $DEPLOYMENT_RELEASE_FILE"
   require_full_sha "$(tr -d '[:space:]' <"$DEPLOYMENT_RELEASE_FILE")"
@@ -208,6 +232,7 @@ require_layout() {
   require_not_world_accessible "$KOTH_CONFIG_DIR/api.env"
   require_not_world_accessible "$KOTH_CONFIG_DIR/migrate.env"
   require_not_world_accessible "$KOTH_CONFIG_DIR/cloudflare-tunnel.token"
+  require_file_mode "$CADDY_FILE" 644
   docker compose version >/dev/null
 }
 
@@ -256,6 +281,45 @@ compose_timed() {
     --env-file "$DEPLOY_ENV" \
     --file "$COMPOSE_FILE" \
     "$@"
+}
+
+install_cloudflare_token() {
+  local token_file="$KOTH_CONFIG_DIR/cloudflare-tunnel.token"
+
+  if ! docker image inspect "$CLOUDFLARE_SECRET_INSTALLER_IMAGE" >/dev/null 2>&1; then
+    docker pull "$CLOUDFLARE_SECRET_INSTALLER_IMAGE" >/dev/null
+  fi
+  docker volume create "$CLOUDFLARE_SECRET_VOLUME" >/dev/null
+  docker run \
+    --rm \
+    --interactive \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --security-opt no-new-privileges:true \
+    --volume "$CLOUDFLARE_SECRET_VOLUME:/run/secrets" \
+    --entrypoint /bin/sh \
+    "$CLOUDFLARE_SECRET_INSTALLER_IMAGE" \
+    -c 'set -eu
+umask 077
+temporary="$(mktemp /run/secrets/.cloudflare_tunnel_token.XXXXXX)"
+trap '\''rm -f "$temporary"'\'' EXIT
+cat >"$temporary"
+test -s "$temporary"
+head -c 1 "$temporary" >/dev/null
+mv -f "$temporary" /run/secrets/cloudflare_tunnel_token
+trap - EXIT' <"$token_file"
+  docker run \
+    --rm \
+    --user 0:0 \
+    --network none \
+    --read-only \
+    --cap-drop ALL \
+    --security-opt no-new-privileges:true \
+    --volume "$CLOUDFLARE_SECRET_VOLUME:/run/secrets:ro" \
+    --entrypoint /bin/sh \
+    "$CLOUDFLARE_SECRET_INSTALLER_IMAGE" \
+    -c 'test -s /run/secrets/cloudflare_tunnel_token && head -c 1 /run/secrets/cloudflare_tunnel_token >/dev/null'
 }
 
 run_migrations() {
@@ -359,6 +423,8 @@ verify_stack() {
   compose exec -T api bun -e \
     'const r=await fetch("http://gateway:8080/api/health/live");if(!r.ok)throw new Error("gateway route: "+r.status)'
   compose exec -T api bun -e \
+    'const r=await fetch("http://gateway:8080/api/auth/get-session");if(!r.ok)throw new Error("auth route: "+r.status)'
+  compose exec -T api bun -e \
     'const {createHmac,randomUUID}=await import("node:crypto");const challenge="koth-deploy-challenge";const body=JSON.stringify({challenge});const id=randomUUID();const timestamp=new Date().toISOString();const signature="sha256="+createHmac("sha256",process.env.TWITCH_EVENTSUB_SECRET).update(id+timestamp+body).digest("hex");const r=await fetch("http://gateway:8080/api/twitch/eventsub",{method:"POST",headers:{"content-type":"application/json","twitch-eventsub-message-id":id,"twitch-eventsub-message-timestamp":timestamp,"twitch-eventsub-message-signature":signature,"twitch-eventsub-message-type":"webhook_callback_verification"},body});const response=await r.text();if(!r.ok||response!==challenge)throw new Error("EventSub challenge: "+r.status+" "+response)'
   verify_external_origin
 }
@@ -366,7 +432,8 @@ verify_stack() {
 start_release() {
   local release="$1"
   export KOTH_RELEASE="$release"
-  compose up --detach --remove-orphans --wait --wait-timeout 180
+  install_cloudflare_token
+  compose up --detach --remove-orphans --force-recreate --wait --wait-timeout 180
   verify_stack
 }
 

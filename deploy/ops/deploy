@@ -22,6 +22,8 @@ fi
 restore_on_error() {
   local exit_code=$?
   trap - ERR
+  compose ps --all >&2 || true
+  compose logs --no-color --tail 100 web api gateway cloudflared >&2 || true
   printf 'deployment failed; restoring the prior runtime\n' >&2
   if [[ -n "$current" ]]; then
     (start_release "$current") || true
