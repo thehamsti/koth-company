@@ -67,11 +67,19 @@ KOTH_PUBLIC_ORIGIN=https://origin.koth.company
 
 ## Provision the Cloudflare tunnel
 
-`koth.company` must use a Cloudflare DNS zone before a public Tunnel hostname can terminate TLS. Add
-the domain to the same Cloudflare account as the tunnel, copy the current Vercel apex, wildcard, and
-CAA records into the new zone, and then delegate the Vercel-registered domain to the assigned
-Cloudflare nameservers. Keep the apex pointed at Vercel during this delegation step so it is not an
-application cutover.
+`koth.company` must use a Cloudflare DNS zone before a public Tunnel hostname can terminate TLS. The
+Vercel project has been deleted, but the domain remains registered through Vercel. Add the domain to
+the same Cloudflare account as the tunnel, then keep or create these apex CAA records in the new zone:
+
+```text
+CAA  @  0 issue "pki.goog"
+CAA  @  0 issue "sectigo.com"
+CAA  @  0 issue "letsencrypt.org"
+```
+
+Cloudflare may import the old Vercel apex and wildcard records while scanning the zone. Delete those
+records; they point at a project that no longer exists. Do not add an apex application record until
+the origin deployment passes its preflight.
 
 On a trusted admin machine with `cloudflared` installed, authenticate to that Cloudflare account,
 create the dedicated tunnel, and write its token to a private file:
@@ -86,7 +94,8 @@ cloudflared tunnel token koth-company > cloudflare-tunnel.token
 The create command also writes a tunnel credentials JSON file. The deployed connector does not need that file or the account-level `cert.pem`; it authenticates with the generated token and sends all traffic to the explicit Compose origin `http://gateway:8080`.
 
 In the new Cloudflare DNS zone, create a proxied `CNAME` named `origin` whose target is
-`<TUNNEL_ID>.cfargotunnel.com`. Obtain the ID without exposing the token:
+`<TUNNEL_ID>.cfargotunnel.com`. The production tunnel ID is
+`8300af3e-7cff-403a-9327-010a0635de92`; confirm it without exposing the token:
 
 ```sh
 cloudflared tunnel list --output json | jq -r '.[] | select(.name == "koth-company") | .id'
@@ -94,6 +103,11 @@ cloudflared tunnel list --output json | jq -r '.[] | select(.name == "koth-compa
 
 Do not run `cloudflared tunnel route dns` with a per-machine default configuration for another zone;
 an inherited tunnel or hostname can create a record in the wrong zone.
+
+Once the zone contains the CAA and `origin` records, open the Vercel dashboard, select **Domains →
+koth.company → Nameservers → Edit**, and replace the Vercel nameservers with the two nameservers
+assigned by Cloudflare. The website is intentionally unavailable until the deployment and apex
+cutover below finish.
 
 Copy only the token to `hamsti1`, install it as a root-readable secret, and remove the transfer copies:
 
@@ -149,13 +163,11 @@ The command is idempotent and fails with an actionable message if Hydramist has 
 After the anonymous origin checks pass:
 
 1. Add Cloudflare cache bypass rules for `/api/*`, `/predictions*`, and `/admin*`.
-2. In Cloudflare DNS, replace the apex Vercel record with a proxied `CNAME` targeting
-   `<TUNNEL_ID>.cfargotunnel.com`. Keep the prior Vercel target recorded and keep the Vercel project
-   frozen as a rollback target for seven days.
+2. In Cloudflare DNS, add a proxied apex `CNAME` targeting `<TUNNEL_ID>.cfargotunnel.com`.
 3. Change `KOTH_PUBLIC_ORIGIN` in `/srv/koth-company/deploy.env` to `https://koth.company`, then run `sudo /srv/koth-company/ops/status` so the same external gate checks the apex.
 4. Verify Twitch sign-in, authenticated `/predictions/control`, a real EventSub sync/challenge, trading, and CV SSE reconnection on the apex.
 5. If markets were staged off, change `PREDICTION_MARKETS_ENABLED=true` and redeploy the same SHA with `--markets-enabled`.
-6. Confirm Vercel API invocations fall to zero. Remove `origin.koth.company` only after the observation window.
+6. Confirm the public routes are healthy and remove `origin.koth.company` only after the observation window.
 
 The existing Twitch application remains in use. Production Better Auth, OAuth redirect, and EventSub callback URLs stay on `https://koth.company`, so the hosting split does not require another app.
 
@@ -167,8 +179,8 @@ Rollback swaps the current and previous immutable releases without rerunning mig
 sudo /srv/koth-company/ops/rollback
 ```
 
-For an origin-routing rollback, restore the prior Vercel apex target in Cloudflare DNS. The
-nameservers do not need to move back to Vercel.
+There is no Vercel application rollback target. Use the retained image rollback for application
+failures; for Cloudflare failures, keep the apex record disabled until the tunnel route is repaired.
 
 Successful operations retain current and previous web, API, and migration images and remove older SHA-tagged KOTH images only. Rollback uses retained images and pulls a component only if that specific image is unexpectedly absent.
 

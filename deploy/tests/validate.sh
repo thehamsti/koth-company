@@ -49,6 +49,11 @@ if ! grep -q 'cloudflared.*tunnel.*ready\|"cloudflared", "tunnel"' "$ROOT/deploy
   exit 1
 fi
 
+if grep -Eq 'keep the apex pointed at Vercel|keep the Vercel project|restore the prior Vercel apex' "$ROOT/deploy/README.md"; then
+  printf 'deployment guidance must not depend on the deleted Vercel project\n' >&2
+  exit 1
+fi
+
 sed -n '/^  cloudflared:/,/^  gateway:/p' "$ROOT/deploy/compose.yaml" >"$TEMP_DIR/cloudflared-compose.yaml"
 for argument in '--token-file' '/run/secrets/cloudflare_tunnel_token' '--url' 'http://gateway:8080'; do
   if ! grep -Fqx -- "      - $argument" "$TEMP_DIR/cloudflared-compose.yaml"; then
