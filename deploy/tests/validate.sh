@@ -49,6 +49,11 @@ if ! grep -q 'cloudflared.*tunnel.*ready\|"cloudflared", "tunnel"' "$ROOT/deploy
   exit 1
 fi
 
+if [[ "$(sed -n '/^  gateway:/,/^  web:/p' "$ROOT/deploy/compose.yaml" | grep -c 'NET_BIND_SERVICE')" != "1" ]]; then
+  printf 'the pinned Caddy binary must retain its sole file capability\n' >&2
+  exit 1
+fi
+
 if grep -Eq 'keep the apex pointed at Vercel|keep the Vercel project|restore the prior Vercel apex' "$ROOT/deploy/README.md"; then
   printf 'deployment guidance must not depend on the deleted Vercel project\n' >&2
   exit 1
