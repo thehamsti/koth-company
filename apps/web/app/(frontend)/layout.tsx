@@ -13,8 +13,11 @@ export const metadata: Metadata = {
 
 export default function FrontendLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
+        <script
+          dangerouslySetInnerHTML={{ __html: "document.documentElement.classList.add('js')" }}
+        />
         {children}
         {process.env.VERCEL === "1" ? <Analytics /> : null}
       </body>
