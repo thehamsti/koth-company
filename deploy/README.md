@@ -28,6 +28,10 @@ trusted workflow definition from `main`, prints the resumable Actions URL, waits
 and image job, then waits for `hamsti1` to finish migrations, health checks, and external SSE
 verification. Pass `--ref <commit-ish>` to release another pushed commit.
 
+The deployment workflow itself must already be installed on `main`. During the initial worker
+bootstrap, merge and push `.github/workflows/release-images.yml` to `main` before running the command;
+the preflight rejects an older workflow contract without creating a partial release.
+
 The final runner job downloads only the artifact produced by that workflow run. It checks the archive
 paths and release marker, uses the job-scoped GitHub token through a temporary Docker configuration,
 and deletes that credential after the job. It never replaces `deploy.env`, service environment files,

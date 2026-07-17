@@ -4,9 +4,36 @@ import {
   normalizeGitHubRemote,
   parseDeployArgs,
   parseWorkflowRunId,
+  requireTrustedWorkflowDeployment,
 } from "./deploy-production";
 
 describe("production deployment command", () => {
+  test("rejects a trusted workflow that predates deployment inputs", () => {
+    const legacyWorkflow = `on:
+  workflow_dispatch:
+    inputs:
+      ref:
+jobs:
+  validate:
+  deploy-preview:
+`;
+    expect(() => requireTrustedWorkflowDeployment(legacyWorkflow)).toThrow(
+      "trusted production workflow on main is not installed",
+    );
+
+    const productionWorkflow = `on:
+  workflow_dispatch:
+    inputs:
+      ref:
+      deploy:
+      markets:
+jobs:
+  validate:
+  deploy:
+`;
+    expect(() => requireTrustedWorkflowDeployment(productionWorkflow)).not.toThrow();
+  });
+
   test("requires an explicit market-state acknowledgement", () => {
     expect(() => parseDeployArgs([])).toThrow("pass --markets-disabled or --markets-enabled");
     expect(() => parseDeployArgs(["--markets-enabled", "--markets-disabled"])).toThrow(

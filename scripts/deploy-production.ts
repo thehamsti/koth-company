@@ -107,6 +107,17 @@ export function deploymentWorkflowArgs(
   ];
 }
 
+export function requireTrustedWorkflowDeployment(workflowYaml: string): void {
+  const hasDeployInput = /^ {6}deploy:\s*$/m.test(workflowYaml);
+  const hasMarketsInput = /^ {6}markets:\s*$/m.test(workflowYaml);
+  const hasDeployJob = /^ {2}deploy:\s*$/m.test(workflowYaml);
+  if (hasDeployInput && hasMarketsInput && hasDeployJob) return;
+
+  throw new Error(
+    `trusted production workflow on ${trustedWorkflowRef} is not installed; merge and push .github/workflows/${workflow} to ${trustedWorkflowRef}, then rerun this command`,
+  );
+}
+
 function run(command: string, args: readonly string[], cwd: string): CommandResult {
   const result = Bun.spawnSync([command, ...args], {
     cwd,
@@ -172,6 +183,15 @@ export function runProductionDeploy(options: DeployOptions): void {
     run("gh", ["api", "--silent", `repos/${repository}/commits/${sha}`], root),
     `${sha} is not available on GitHub; push it before deploying`,
   );
+  const trustedWorkflow = requireSuccess(
+    run(
+      "gh",
+      ["workflow", "view", workflow, "--repo", repository, "--ref", trustedWorkflowRef, "--yaml"],
+      root,
+    ),
+    `could not inspect the trusted production workflow on ${trustedWorkflowRef}`,
+  );
+  requireTrustedWorkflowDeployment(trustedWorkflow);
 
   const subject = requireSuccess(
     run("git", ["show", "--no-patch", "--format=%s", sha], root),
