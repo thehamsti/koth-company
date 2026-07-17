@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+launcher_source="${1:-}"
+RUNNER_ROOT="${RUNNER_ROOT:-$HOME/actions-runner-koth-production}"
+CRON_BEGIN="# BEGIN koth-production-runner"
+CRON_END="# END koth-production-runner"
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+for command in awk crontab flock id install mktemp nohup; do
+  command -v "$command" >/dev/null 2>&1 || die "required command not found: $command"
+done
+[[ "$RUNNER_ROOT" != *[[:space:]]* ]] || die "runner path must not contain whitespace"
+[[ -f "$RUNNER_ROOT/.runner" ]] || die "runner is not registered at $RUNNER_ROOT"
+[[ -x "$RUNNER_ROOT/bin/runsvc.sh" ]] || die "runner service entrypoint is missing"
+[[ -f "$launcher_source" && ! -L "$launcher_source" ]] || die "runner launcher is missing"
+
+install -m 0700 "$launcher_source" "$RUNNER_ROOT/koth-production-runner"
+crontab_file="$(mktemp)"
+current_crontab="${crontab_file}.current"
+crontab_error="${crontab_file}.error"
+cleanup() {
+  rm -f "$crontab_file" "$current_crontab" "$crontab_error"
+}
+trap cleanup EXIT
+
+if LC_ALL=C crontab -l >"$current_crontab" 2>"$crontab_error"; then
+  if ! awk -v begin="$CRON_BEGIN" -v end="$CRON_END" '
+    $0 == begin {
+      if (skipping || saw_begin) exit 1
+      skipping = 1
+      saw_begin = 1
+      next
+    }
+    $0 == end {
+      if (!skipping || saw_end) exit 1
+      skipping = 0
+      saw_end = 1
+      next
+    }
+    !skipping { print }
+    END {
+      if (skipping || saw_begin != saw_end) exit 1
+    }
+  ' "$current_crontab" >"$crontab_file"; then
+    die "existing crontab contains malformed $CRON_BEGIN markers"
+  fi
+else
+  crontab_error_message="$(<"$crontab_error")"
+  expected_error="no crontab for $(id -un)"
+  [[ "$crontab_error_message" == "$expected_error" ]] ||
+    die "could not read existing crontab: ${crontab_error_message:-unknown error}"
+fi
+{
+  printf '%s\n' "$CRON_BEGIN"
+  printf '* * * * * %s/koth-production-runner >/dev/null 2>&1\n' "$RUNNER_ROOT"
+  printf '%s\n' "$CRON_END"
+} >>"$crontab_file"
+crontab "$crontab_file"
+
+nohup "$RUNNER_ROOT/koth-production-runner" </dev/null >/dev/null 2>&1 &
+printf 'production runner activated with a locked cron supervisor\n'

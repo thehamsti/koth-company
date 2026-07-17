@@ -10,6 +10,19 @@ on:
         required: true
         default: main
         type: string
+      deploy:
+        description: Deploy the published release to production
+        required: true
+        default: false
+        type: boolean
+      markets:
+        description: Confirm the configured production market state
+        required: true
+        default: disabled
+        type: choice
+        options:
+          - disabled
+          - enabled
 
 concurrency:
   group: release-images-${{ inputs.ref }}
@@ -72,7 +85,21 @@ jobs:
         run: bun run --cwd apps/web build
 
       - name: Shellcheck deployment operations
-        run: shellcheck deploy/ops/common.sh deploy/ops/deploy deploy/ops/rollback deploy/ops/status
+        run: >-
+          shellcheck
+          deploy/ops/common.sh
+          deploy/ops/deploy
+          deploy/ops/install-release
+          deploy/ops/rollback
+          deploy/ops/status
+          deploy/runner/activate
+          deploy/runner/run
+          deploy/runner/setup
+          deploy/tests/install-release.sh
+          deploy/tests/runner-activate.sh
+          deploy/tests/runner-setup.sh
+          deploy/tests/setup-production-runner.sh
+          scripts/setup-production-runner
 
       - name: Validate deployment artifacts
         run: bash deploy/tests/validate.sh
@@ -170,3 +197,91 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}
           provenance: mode=max
           sbom: true
+
+  deploy:
+    if: ${{ inputs.deploy }}
+    needs:
+      - validate
+      - publish
+    runs-on: [self-hosted, linux, x64, koth-production]
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://koth.company
+    concurrency:
+      group: koth-production
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      packages: read
+    steps:
+      - name: Download the immutable deployment bundle
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: koth-deploy-${{ needs.validate.outputs.sha }}
+          path: ${{ runner.temp }}/koth-deploy-artifact
+
+      - name: Install and deploy on hamsti1
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+          MARKET_STATE: ${{ inputs.markets }}
+          RELEASE_SHA: ${{ needs.validate.outputs.sha }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          artifact="$RUNNER_TEMP/koth-deploy-artifact/koth-deploy-$RELEASE_SHA.tar.gz"
+          bundle_name="koth-company-$RELEASE_SHA"
+          extract_root="$(mktemp -d "$RUNNER_TEMP/koth-release.XXXXXX")"
+          docker_config="$(mktemp -d "$RUNNER_TEMP/koth-docker.XXXXXX")"
+          chmod 0700 "$extract_root" "$docker_config"
+          cleanup() {
+            docker --config "$docker_config" logout ghcr.io >/dev/null 2>&1 || true
+            rm -rf "$extract_root" "$docker_config"
+          }
+          trap cleanup EXIT
+
+          test -f "$artifact"
+          while IFS= read -r entry; do
+            case "$entry" in
+              "$bundle_name" | "$bundle_name/"*) ;;
+              *)
+                printf 'artifact contains an unexpected path: %s\n' "$entry" >&2
+                exit 1
+                ;;
+            esac
+            case "/$entry/" in
+              *'/../'* | *'/./'*)
+                printf 'artifact contains an unsafe path: %s\n' "$entry" >&2
+                exit 1
+                ;;
+            esac
+          done < <(tar --list --gzip --file "$artifact")
+          tar --extract --gzip --file "$artifact" --directory "$extract_root"
+          bundle="$extract_root/$bundle_name"
+          test "$(tr -d '[:space:]' <"$bundle/RELEASE")" = "$RELEASE_SHA"
+          test -z "$(find "$bundle/deploy" -type l -print -quit)"
+          for path in \
+            deploy/compose.yaml \
+            deploy/Caddyfile \
+            deploy/ops/common.sh \
+            deploy/ops/deploy \
+            deploy/ops/install-release \
+            deploy/ops/rollback \
+            deploy/ops/status; do
+            test -f "$bundle/$path"
+            test ! -L "$bundle/$path"
+          done
+
+          printf '%s' "$GHCR_TOKEN" | docker --config "$docker_config" login \
+            ghcr.io --username "$GHCR_USER" --password-stdin
+          export DOCKER_CONFIG="$docker_config"
+          if [[ "$MARKET_STATE" == "enabled" ]]; then
+            market_acceptance=--markets-enabled
+          else
+            market_acceptance=--markets-disabled
+          fi
+          KOTH_ROOT="$HOME/koth-company" \
+            KOTH_CONFIG_DIR="$HOME/.config/koth-company" \
+            bash "$bundle/deploy/ops/install-release" \
+              "$bundle" "$RELEASE_SHA" "$market_acceptance"

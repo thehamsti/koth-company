@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+RUNNER_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "$RUNNER_ROOT"
+exec flock -n -F "$RUNNER_ROOT/.koth-production-runner.lock" ./bin/runsvc.sh

@@ -5,7 +5,20 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 
-for script in "$ROOT"/deploy/ops/common.sh "$ROOT"/deploy/ops/deploy "$ROOT"/deploy/ops/rollback "$ROOT"/deploy/ops/status; do
+for script in \
+  "$ROOT"/deploy/ops/common.sh \
+  "$ROOT"/deploy/ops/deploy \
+  "$ROOT"/deploy/ops/install-release \
+  "$ROOT"/deploy/ops/rollback \
+  "$ROOT"/deploy/ops/status \
+  "$ROOT"/deploy/runner/activate \
+  "$ROOT"/deploy/runner/run \
+  "$ROOT"/deploy/runner/setup \
+  "$ROOT"/deploy/tests/install-release.sh \
+  "$ROOT"/deploy/tests/runner-activate.sh \
+  "$ROOT"/deploy/tests/runner-setup.sh \
+  "$ROOT"/deploy/tests/setup-production-runner.sh \
+  "$ROOT"/scripts/setup-production-runner; do
   bash -n "$script"
 done
 
@@ -40,7 +53,33 @@ if (
 fi
 
 if command -v shellcheck >/dev/null 2>&1; then
-  shellcheck "$ROOT"/deploy/ops/common.sh "$ROOT"/deploy/ops/deploy "$ROOT"/deploy/ops/rollback "$ROOT"/deploy/ops/status
+  shellcheck \
+    "$ROOT"/deploy/ops/common.sh \
+    "$ROOT"/deploy/ops/deploy \
+    "$ROOT"/deploy/ops/install-release \
+    "$ROOT"/deploy/ops/rollback \
+    "$ROOT"/deploy/ops/status \
+    "$ROOT"/deploy/runner/activate \
+    "$ROOT"/deploy/runner/run \
+    "$ROOT"/deploy/runner/setup \
+    "$ROOT"/deploy/tests/install-release.sh \
+    "$ROOT"/deploy/tests/runner-activate.sh \
+    "$ROOT"/deploy/tests/runner-setup.sh \
+    "$ROOT"/deploy/tests/setup-production-runner.sh \
+    "$ROOT"/scripts/setup-production-runner
+fi
+
+bash "$ROOT/deploy/tests/install-release.sh"
+bash "$ROOT/deploy/tests/runner-activate.sh"
+bash "$ROOT/deploy/tests/runner-setup.sh"
+bash "$ROOT/deploy/tests/setup-production-runner.sh"
+
+if ! grep -Fq 'runs-on: [self-hosted, linux, x64, koth-production]' "$ROOT/.github/workflows/release-images.yml" ||
+  ! grep -Fq 'actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093' "$ROOT/.github/workflows/release-images.yml" ||
+  ! grep -Fq 'docker --config "$docker_config" login' "$ROOT/.github/workflows/release-images.yml" ||
+  ! grep -Fq 'deploy/ops/install-release' "$ROOT/.github/workflows/release-images.yml"; then
+  printf 'production deployment must run through the dedicated self-hosted worker\n' >&2
+  exit 1
 fi
 
 if grep -Eq '^[[:space:]]+ports:' "$ROOT/deploy/compose.yaml"; then

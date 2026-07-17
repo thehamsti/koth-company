@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+HOST="${KOTH_PRODUCTION_HOST:-hamsti1}"
+REPOSITORY="thehamsti/koth-company"
+RUNNER_NAME="hamsti1-koth-production"
+remote_directory=""
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+# ShellCheck cannot see functions invoked through traps.
+# shellcheck disable=SC2329
+cleanup() {
+  if [[ -n "$remote_directory" ]]; then
+    # The server generated this path and the strict prefix check below rejects shell metacharacters.
+    # shellcheck disable=SC2029
+    ssh "$HOST" "rm -rf '$remote_directory'" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT
+
+[[ "$HOST" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "production host is invalid: $HOST"
+for command in gh scp sleep ssh; do
+  command -v "$command" >/dev/null 2>&1 || die "required command not found: $command"
+done
+gh auth status --hostname github.com >/dev/null
+remote_candidate="$(ssh "$HOST" 'mktemp -d /tmp/koth-production-runner-setup.XXXXXX')"
+[[ "$remote_candidate" =~ ^/tmp/koth-production-runner-setup\.[A-Za-z0-9]+$ ]] ||
+  die "remote temporary path is invalid"
+remote_directory="$remote_candidate"
+scp -q \
+  "$ROOT/deploy/runner/activate" \
+  "$ROOT/deploy/runner/run" \
+  "$ROOT/deploy/runner/setup" \
+  "$HOST:$remote_directory/"
+
+# The server-generated directory is restricted to a shell-safe character set above.
+# shellcheck disable=SC2029
+gh api \
+  --method POST \
+  "repos/$REPOSITORY/actions/runners/registration-token" \
+  --jq .token | ssh "$HOST" \
+  "bash '$remote_directory/setup' '$remote_directory/activate' '$remote_directory/run'"
+
+for ((attempt = 0; attempt < 30; attempt += 1)); do
+  if runner_status="$(
+    gh api "repos/$REPOSITORY/actions/runners" \
+      --jq ".runners[] | select(.name == \"$RUNNER_NAME\") | .status" 2>/dev/null
+  )" && [[ "$runner_status" == "online" ]]; then
+    printf 'Production runner %s is online.\n' "$RUNNER_NAME"
+    exit 0
+  fi
+  sleep 1
+done
+
+die "runner did not report online within 30 seconds; inspect ~/actions-runner-koth-production/_diag on $HOST"

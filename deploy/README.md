@@ -1,10 +1,70 @@
-# Manual `hamsti1` deployment
+# Production deployment on `hamsti1`
 
 This stack is independent of Coolify and the host Traefik instance. It publishes no host ports. A dedicated named Cloudflare Tunnel reaches Caddy on the Compose `edge` network; only Caddy also joins the private application network. The connector reads its tunnel token from a file and supplies its single origin URL on the command line, so it does not depend on dashboard-managed ingress rules.
 
+## Routine deployment
+
+The repository-level GitHub Actions runner on `hamsti1` waits for outbound job assignments; it does
+not expose a webhook or another public port. A production deployment validates and publishes an
+immutable SHA on GitHub-hosted runners, then assigns only the final install job to the dedicated
+`koth-production` runner.
+
+From a clean checkout whose commit has been pushed to GitHub, run:
+
+```sh
+bun run deploy:production -- --markets-disabled
+```
+
+Use `--markets-enabled` only when production `api.env` intentionally contains
+`PREDICTION_MARKETS_ENABLED=true`. The acknowledgement is mandatory so a deployment cannot silently
+change the product state. To inspect the target without dispatching anything:
+
+```sh
+bun run deploy:production -- --dry-run --markets-disabled
+```
+
+The command resolves `HEAD` to a full SHA, rejects a dirty or unpushed checkout, dispatches the
+trusted workflow definition from `main`, prints the resumable Actions URL, waits for every validation
+and image job, then waits for `hamsti1` to finish migrations, health checks, and external SSE
+verification. Pass `--ref <commit-ish>` to release another pushed commit.
+
+The final runner job downloads only the artifact produced by that workflow run. It checks the archive
+paths and release marker, uses the job-scoped GitHub token through a temporary Docker configuration,
+and deletes that credential after the job. It never replaces `deploy.env`, service environment files,
+or the Cloudflare tunnel token. Bundle files are installed while holding the production deployment
+lock and are restored if the target runtime fails and rolls back.
+
+## One-time runner setup
+
+The repository is private, and the production runner is registered only to this repository. Bootstrap
+the pinned, checksum-verified Linux runner from an administrator checkout:
+
+```sh
+bun run setup:production-runner
+```
+
+The command registers `hamsti1-koth-production` with the `koth-production` label and installs a
+user-owned cron supervisor. The supervisor invokes GitHub's `bin/runsvc.sh` service entrypoint under a
+non-blocking lock, starts within one minute after boot, and starts another listener if the process
+exits. It preserves existing crontab entries and needs no public listener or sudo access. The
+registration token is short-lived and is streamed directly to the server; it is not saved in the
+repository or shell history.
+
+The runner account can access the production Docker daemon and configuration. Treat permission to
+modify repository workflows as production access, and never allow workflows from untrusted pull
+requests to target the `koth-production` label.
+
+After setup, confirm the runner is idle under **Repository settings → Actions → Runners**. Configure
+required reviewers on the GitHub `production` environment if deployments should require a separate
+approval after images finish publishing.
+
 ## Publish an immutable release
 
-Push the desired commit and run **Release self-hosted images** with its branch, tag, or full SHA. The workflow validates the exact checkout, publishes private `linux/amd64` images tagged with its resolved 40-character SHA, and uploads `koth-deploy-<SHA>`, an artifact containing the deployment files from that same checkout.
+The worker-backed command above is the normal path. For a publish-only or recovery operation, run
+**Release self-hosted images** with `deploy` disabled and a branch, tag, or full SHA. The workflow
+validates the exact checkout, publishes private `linux/amd64` images tagged with its resolved
+40-character SHA, and uploads `koth-deploy-<SHA>`, an artifact containing the deployment files from
+that same checkout.
 
 Download and inspect that artifact rather than copying deployment files from a later `main` checkout:
 

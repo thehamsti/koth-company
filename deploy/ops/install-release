@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+bundle_root="${1:-}"
+release="${2:-}"
+market_acceptance="${3:-}"
+KOTH_ROOT="${KOTH_ROOT:-$HOME/koth-company}"
+KOTH_CONFIG_DIR="${KOTH_CONFIG_DIR:-$HOME/.config/koth-company}"
+export KOTH_CONFIG_DIR KOTH_ROOT
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "required command not found: $1"
+}
+
+require_regular_file() {
+  [[ -f "$1" && ! -L "$1" ]] || die "required regular file is missing: $1"
+}
+
+replace_file() {
+  local source="$1"
+  local destination="$2"
+  mv -f "$source" "$destination"
+}
+
+restore_bundle() {
+  install -m 0600 "$backup/compose.yaml" "$staging/restore-compose.yaml"
+  install -m 0644 "$backup/Caddyfile" "$staging/restore-Caddyfile"
+  for operation in common.sh deploy rollback status; do
+    install -m 0700 "$backup/ops/$operation" "$staging/restore-$operation"
+  done
+  if [[ "$had_previous_installer" == "true" ]]; then
+    install -m 0700 "$backup/ops/install-release" "$staging/restore-install-release"
+  fi
+  install -m 0600 "$backup/deployment-release" "$staging/restore-deployment-release"
+
+  replace_file "$staging/restore-compose.yaml" "$KOTH_ROOT/compose.yaml"
+  replace_file "$staging/restore-Caddyfile" "$KOTH_ROOT/Caddyfile"
+  for operation in common.sh deploy rollback status; do
+    replace_file "$staging/restore-$operation" "$KOTH_ROOT/ops/$operation"
+  done
+  if [[ "$had_previous_installer" == "true" ]]; then
+    replace_file "$staging/restore-install-release" "$KOTH_ROOT/ops/install-release"
+  else
+    rm -f "$KOTH_ROOT/ops/install-release"
+  fi
+  replace_file "$staging/restore-deployment-release" "$KOTH_ROOT/deployment-release"
+}
+
+for command in find flock install mktemp mv; do
+  require_command "$command"
+done
+[[ "$release" =~ ^[0-9a-f]{40}$ ]] || die "release must be a lowercase 40-character Git SHA"
+case "$market_acceptance" in
+  --markets-disabled | --markets-enabled) ;;
+  *) die "pass --markets-enabled or --markets-disabled" ;;
+esac
+[[ -d "$bundle_root" ]] || die "bundle directory does not exist: $bundle_root"
+bundle_root="$(cd -- "$bundle_root" && pwd -P)"
+[[ "$(tr -d '[:space:]' <"$bundle_root/RELEASE")" == "$release" ]] ||
+  die "bundle release marker does not match $release"
+
+required=(
+  RELEASE
+  deploy/compose.yaml
+  deploy/Caddyfile
+  deploy/ops/common.sh
+  deploy/ops/deploy
+  deploy/ops/install-release
+  deploy/ops/rollback
+  deploy/ops/status
+)
+for path in "${required[@]}"; do
+  require_regular_file "$bundle_root/$path"
+done
+[[ -z "$(find "$bundle_root/deploy" -type l -print -quit)" ]] || die "deployment bundle contains a symbolic link"
+
+for path in \
+  compose.yaml \
+  Caddyfile \
+  deployment-release \
+  ops/common.sh \
+  ops/deploy \
+  ops/rollback \
+  ops/status; do
+  require_regular_file "$KOTH_ROOT/$path"
+done
+[[ -d "$KOTH_CONFIG_DIR" ]] || die "configuration directory does not exist: $KOTH_CONFIG_DIR"
+
+exec 9>"$KOTH_ROOT/.deploy.lock"
+flock -n 9 || die "another deployment operation is running"
+export KOTH_DEPLOY_LOCK_FD=9
+
+workspace="$(mktemp -d "$KOTH_ROOT/.release-install-${release}.XXXXXX")"
+staging="$workspace/staging"
+backup="$workspace/backup"
+mkdir -p "$staging/ops" "$backup/ops"
+bundle_changed=false
+bundle_committed=false
+had_previous_installer=false
+
+cleanup() {
+  rm -rf "$workspace"
+}
+
+restore_on_error() {
+  local exit_code=$?
+  trap - ERR
+  if [[ "$bundle_changed" == "true" && "$bundle_committed" != "true" ]]; then
+    restore_bundle || printf 'warning: failed to restore the prior deployment bundle\n' >&2
+  fi
+  cleanup
+  exit "$exit_code"
+}
+trap cleanup EXIT
+trap restore_on_error ERR
+
+install -m 0600 "$KOTH_ROOT/compose.yaml" "$backup/compose.yaml"
+install -m 0644 "$KOTH_ROOT/Caddyfile" "$backup/Caddyfile"
+install -m 0600 "$KOTH_ROOT/deployment-release" "$backup/deployment-release"
+for operation in common.sh deploy rollback status; do
+  install -m 0700 "$KOTH_ROOT/ops/$operation" "$backup/ops/$operation"
+done
+if [[ -e "$KOTH_ROOT/ops/install-release" ]]; then
+  require_regular_file "$KOTH_ROOT/ops/install-release"
+  install -m 0700 "$KOTH_ROOT/ops/install-release" "$backup/ops/install-release"
+  had_previous_installer=true
+fi
+
+install -m 0600 "$bundle_root/deploy/compose.yaml" "$staging/compose.yaml"
+install -m 0644 "$bundle_root/deploy/Caddyfile" "$staging/Caddyfile"
+printf '%s\n' "$release" >"$staging/deployment-release"
+chmod 0600 "$staging/deployment-release"
+for operation in common.sh deploy install-release rollback status; do
+  install -m 0700 "$bundle_root/deploy/ops/$operation" "$staging/ops/$operation"
+done
+
+bundle_changed=true
+replace_file "$staging/compose.yaml" "$KOTH_ROOT/compose.yaml"
+replace_file "$staging/Caddyfile" "$KOTH_ROOT/Caddyfile"
+for operation in common.sh deploy install-release rollback status; do
+  replace_file "$staging/ops/$operation" "$KOTH_ROOT/ops/$operation"
+done
+# The marker moves last so the host never identifies a partially installed bundle as deployable.
+replace_file "$staging/deployment-release" "$KOTH_ROOT/deployment-release"
+
+if "$KOTH_ROOT/ops/deploy" "$release" "$market_acceptance"; then
+  bundle_committed=true
+else
+  exit_code=$?
+  restore_bundle
+  bundle_changed=false
+  trap - ERR
+  exit "$exit_code"
+fi
+
+if "$KOTH_ROOT/ops/status"; then
+  :
+else
+  exit_code=$?
+  trap - ERR
+  exit "$exit_code"
+fi
+[[ "$(tr -d '[:space:]' <"$KOTH_ROOT/releases/current")" == "$release" ]] ||
+  die "current release does not match $release"
+[[ "$(tr -d '[:space:]' <"$KOTH_ROOT/deployment-release")" == "$release" ]] ||
+  die "installed bundle does not match $release"
+trap - ERR
+
+printf 'installed and verified production release %s\n' "$release"

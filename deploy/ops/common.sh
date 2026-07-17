@@ -259,6 +259,11 @@ require_market_acceptance() {
 }
 
 acquire_lock() {
+  if [[ -n "${KOTH_DEPLOY_LOCK_FD:-}" ]]; then
+    [[ "$KOTH_DEPLOY_LOCK_FD" =~ ^[0-9]+$ ]] || die "inherited deployment lock descriptor is invalid"
+    flock -n "$KOTH_DEPLOY_LOCK_FD" || die "inherited deployment lock is unavailable"
+    return
+  fi
   mkdir -p "$RELEASES_DIR"
   exec 9>"$KOTH_ROOT/.deploy.lock"
   flock -n 9 || die "another deployment operation is running"
