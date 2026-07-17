@@ -28,7 +28,14 @@ afterEach(() => {
 
 const snapshot = {
   enabled: true,
-  event: { id: "event", name: "KOTH Week 1", season: 2, week: 1, status: "live" },
+  event: {
+    id: "event",
+    name: "KOTH Week 1",
+    season: 2,
+    week: 1,
+    status: "live",
+    startingCrowns: "10000.00000000",
+  },
   portfolio: null,
   markets: [
     {
@@ -134,7 +141,14 @@ describe("PredictionsClient", () => {
         }),
       ),
     ) as unknown as typeof fetch;
-    render(<PredictionsClient initial={snapshot} />);
+    render(
+      <PredictionsClient
+        initial={{
+          ...snapshot,
+          portfolio: { availableCrowns: "10000", equity: "10000" },
+        }}
+      />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /Wins 63%/ }));
     fireEvent.click(screen.getByRole("button", { name: "Preview buy" }));
@@ -157,6 +171,63 @@ describe("PredictionsClient", () => {
     expect(screen.getByText("Signed in as")).toBeTruthy();
     expect(screen.getByText("Hydra")).toBeTruthy();
     expect(screen.getByText("H").getAttribute("aria-hidden")).toBe("true");
+  });
+
+  test("offers event check-in to a signed-in viewer without a portfolio", async () => {
+    sessionData = { user: { id: "viewer", name: "Hydra" } };
+    globalThis.fetch = mock((url: RequestInfo | URL) => {
+      expect(String(url)).toBe("/api/predictions/check-in");
+      return Promise.resolve(
+        Response.json({
+          alreadyCheckedIn: false,
+          account: {
+            eventId: "event",
+            portfolio: { availableCrowns: "10000.00000000", equity: "10000.00000000" },
+            sharesByOutcome: {},
+          },
+        }),
+      );
+    }) as unknown as typeof fetch;
+    render(<PredictionsClient initial={snapshot} />);
+
+    expect(screen.getByText("Claim 10,000 Crowns")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Check in and claim Crowns" }));
+
+    await waitFor(() => expect(screen.getByText("10,000 Crowns")).toBeTruthy());
+    expect(screen.queryByRole("button", { name: "Check in and claim Crowns" })).toBeNull();
+    expect(screen.getByRole("status").textContent).toContain(
+      "Checked in — 10,000 Crowns added to your balance.",
+    );
+  });
+
+  test("does not offer check-in to anonymous viewers or checked-in portfolios", () => {
+    const { unmount } = render(<PredictionsClient initial={snapshot} />);
+    expect(screen.queryByRole("button", { name: "Check in and claim Crowns" })).toBeNull();
+    unmount();
+
+    sessionData = { user: { id: "viewer", name: "Hydra" } };
+    render(
+      <PredictionsClient
+        initial={{
+          ...snapshot,
+          portfolio: { availableCrowns: "10000", equity: "10000" },
+        }}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Check in and claim Crowns" })).toBeNull();
+  });
+
+  test("gates the position ticket until the viewer checks in", () => {
+    sessionData = { user: { id: "viewer", name: "Hydra" } };
+    render(<PredictionsClient initial={snapshot} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Wins 63%/ }));
+
+    expect(screen.getByRole("button", { name: "Preview buy" }).hasAttribute("disabled")).toBe(true);
+    expect(screen.getByRole("button", { name: "Preview sell" }).hasAttribute("disabled")).toBe(
+      true,
+    );
+    expect(screen.getByText("Check in to claim your Crowns before trading.")).toBeTruthy();
   });
 
   test("applies streamed market updates without polling the snapshot endpoint", () => {

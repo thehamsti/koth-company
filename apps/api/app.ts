@@ -40,6 +40,7 @@ import {
 } from "../../packages/predictions/services/channel-points";
 import { getOperatorState, runOperatorCommand } from "../../packages/predictions/services/operator";
 import {
+  checkInViewer,
   createTradeQuote,
   executeTrade,
   getPublicMarketSnapshot,
@@ -336,7 +337,7 @@ type EventSubDependencies = {
 
 const eventSubDependencies: EventSubDependencies = {
   processRedemption: processChannelPointRedemption,
-  publishAccount: (userId) => realtime.publishChannelPointCredit(userId),
+  publishAccount: (userId) => realtime.publishAccountRefresh(userId),
 };
 
 export async function twitchEventSub(
@@ -604,6 +605,12 @@ export async function handleRequest(request: Request, server?: RequestServer): P
     }
     if (pathname === "/api/predictions/account" && method === "GET") {
       return await viewerAccount(request);
+    }
+    if (pathname === "/api/predictions/check-in" && method === "POST") {
+      const viewer = await requireViewer(request);
+      const result = await checkInViewer(viewer.id);
+      await realtime.publishAccountRefresh(viewer.id);
+      return json(result);
     }
     if (pathname === "/api/predictions/quotes" && method === "POST") {
       const viewer = await requireViewer(request);

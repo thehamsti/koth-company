@@ -1,8 +1,10 @@
 # Twitch channel points setup
 
 The prediction market converts broadcaster-created Twitch Channel Point rewards into free KOTH
-Crowns. Redemptions only succeed for viewers who have signed into KOTH with the same Twitch account,
-and rewards are enabled only while an event is live.
+Crowns. Redemptions only succeed for viewers who have signed into KOTH with the same Twitch account
+and checked in to the live event, and rewards are enabled only while an event is live. Checking in
+to an event is what claims a viewer's starting Crowns: the balance is granted once, when the viewer
+selects **Check in and claim Crowns** on `/predictions`, not when they first open the page.
 
 ## Twitch application
 
@@ -66,6 +68,6 @@ and public SSE through `KOTH_PUBLIC_ORIGIN` (`https://koth.company` in productio
 OAuth and real EventSub synchronization only against the apex because Twitch validates the exact
 registered production URLs.
 
-Viewers must sign into `/predictions` with Twitch before redeeming. Unknown KOTH users, out-of-sync
-reward costs, redemptions above the event cap, and redemptions made without a live event are refunded
-through Twitch.
+Viewers must sign into `/predictions` with Twitch and check in to the event before redeeming.
+Unknown KOTH users, viewers who have not checked in, out-of-sync reward costs, redemptions above the
+event cap, and redemptions made without a live event are refunded through Twitch.

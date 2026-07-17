@@ -218,6 +218,19 @@ describe("Twitch EventSub webhook", () => {
   });
 });
 
+describe("event check-in", () => {
+  test("requires a signed-in viewer", async () => {
+    const response = await handleRequest(
+      new Request("http://localhost/api/predictions/check-in", { method: "POST" }),
+    );
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({
+      error: { code: "AUTH_REQUIRED", message: "Sign in with Twitch to continue." },
+    });
+  });
+});
+
 describe("viewer account", () => {
   test("returns only the signed-in viewer's current account", async () => {
     const loadAccount = mock((_userId: string) =>
@@ -241,7 +254,14 @@ describe("viewer account", () => {
     const snapshot = predictionSnapshotFrom(
       {
         enabled: true,
-        event: { id: eventId, name: "KOTH", season: 2, week: 1, status: "live" },
+        event: {
+          id: eventId,
+          name: "KOTH",
+          season: 2,
+          week: 1,
+          status: "live",
+          startingCrowns: "10000",
+        },
         markets: [
           {
             id: "market-1",
@@ -287,7 +307,14 @@ describe("realtime request limits", () => {
 
 describe("account invalidation", () => {
   const state = {
-    event: { id: eventId, name: "KOTH", season: 2, week: 1, status: "live" },
+    event: {
+      id: eventId,
+      name: "KOTH",
+      season: 2,
+      week: 1,
+      status: "live",
+      startingCrowns: "10000",
+    },
     contestants: [],
     arenas: [],
     markets: [{ id: "market-1", title: "Arena", status: "settled", version: 2 }],

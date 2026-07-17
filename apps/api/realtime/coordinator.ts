@@ -156,7 +156,7 @@ export class RealtimeCoordinator {
     this.#scheduleLeaderboards();
   }
 
-  async publishChannelPointCredit(userId: string): Promise<void> {
+  async publishAccountRefresh(userId: string): Promise<void> {
     this.broker.publish(
       [`account:${userId}`],
       "account.updated",

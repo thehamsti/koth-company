@@ -12,6 +12,7 @@ export type EventSnapshot = {
   season: number;
   week: number;
   status: string;
+  startingCrowns: string;
 };
 
 export type PublicOutcomeSnapshot = {
@@ -73,6 +74,11 @@ export type PredictionSnapshot = {
   markets: MarketSnapshot[];
   leaderboard: EventLeaderboardEntry[];
   seasonLeaderboard: SeasonLeaderboardEntry[];
+};
+
+export type CheckInResult = {
+  alreadyCheckedIn: boolean;
+  account: ViewerAccountSnapshot;
 };
 
 export type TradeQuote = {

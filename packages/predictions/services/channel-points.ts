@@ -41,7 +41,6 @@ export type RedemptionResult = {
 async function getActiveEvent(): Promise<{
   id: string;
   status: string;
-  startingCrowns: string;
 } | null> {
   const [event] = await predictionDb
     .select()
@@ -50,32 +49,19 @@ async function getActiveEvent(): Promise<{
     .orderBy(sql`${events.createdAt} desc`)
     .limit(1);
   if (!event) return null;
-  return { id: event.id, status: event.status, startingCrowns: event.startingCrowns };
+  return { id: event.id, status: event.status };
 }
 
-async function getOrCreatePortfolio(
+async function getCheckedInPortfolio(
   eventId: string,
   userId: string,
-): Promise<{ id: string; availableCrowns: string }> {
+): Promise<{ id: string } | null> {
   const [existing] = await predictionDb
-    .select()
+    .select({ id: portfolios.id })
     .from(portfolios)
     .where(and(eq(portfolios.eventId, eventId), eq(portfolios.userId, userId)))
     .limit(1);
-  if (existing) return { id: existing.id, availableCrowns: existing.availableCrowns };
-  const [event] = await predictionDb.select().from(events).where(eq(events.id, eventId)).limit(1);
-  if (!event) throw new Error("Event not found.");
-  await predictionDb
-    .insert(portfolios)
-    .values({ eventId, userId, availableCrowns: event.startingCrowns })
-    .onConflictDoNothing({ target: [portfolios.eventId, portfolios.userId] });
-  const [portfolio] = await predictionDb
-    .select()
-    .from(portfolios)
-    .where(and(eq(portfolios.eventId, eventId), eq(portfolios.userId, userId)))
-    .limit(1);
-  if (!portfolio) throw new Error("Portfolio creation failed.");
-  return { id: portfolio.id, availableCrowns: portfolio.availableCrowns };
+  return existing ?? null;
 }
 
 async function findUserByTwitchId(
@@ -421,7 +407,13 @@ export async function processChannelPointRedemption(
       "Twitch account is not linked to a KOTH account. Sign in first.",
     );
   }
-  const portfolio = await getOrCreatePortfolio(activeEvent.id, appUser.id);
+  const portfolio = await getCheckedInPortfolio(activeEvent.id, appUser.id);
+  if (!portfolio) {
+    return await cancelRedemption(
+      event,
+      "Check in to the event on KOTH to claim your Crowns before converting Channel Points.",
+    );
+  }
   const crowns = new Decimal(reward.crowns).toDecimalPlaces(8).toFixed(8);
   try {
     const reservation = await reserveRedemption(

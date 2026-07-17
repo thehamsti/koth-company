@@ -29,6 +29,7 @@ type FakeState = {
   crownCredits: number;
   ledgerWrites: Array<Record<string, unknown>>;
   failNextClaim: boolean;
+  hasPortfolio: boolean;
 };
 
 const portfolio = {
@@ -111,6 +112,7 @@ function selectedRows(table: object, selection?: object): unknown[] {
     ];
   }
   if (table === portfolios) {
+    if (!state.hasPortfolio) return [];
     if (selectionHas(selection, "userId")) return [{ userId: portfolio.userId }];
     if (selectionHas(selection, "id")) return [{ id: portfolio.id }];
     return [portfolio];
@@ -270,7 +272,13 @@ function seedRedemption(status: string): void {
 }
 
 beforeEach(() => {
-  state = { redemption: null, crownCredits: 0, ledgerWrites: [], failNextClaim: false };
+  state = {
+    redemption: null,
+    crownCredits: 0,
+    ledgerWrites: [],
+    failNextClaim: false,
+    hasPortfolio: true,
+  };
   updateTwitchRedemptionStatus.mockClear();
   updateTwitchRedemptionStatus.mockImplementation(() => Promise.resolve());
   getTwitchRedemptionStatus.mockClear();
@@ -283,6 +291,29 @@ afterAll(() => {
 });
 
 describe("channel point redemption durability", () => {
+  test("refunds viewers who have not checked in to the event", async () => {
+    state.hasPortfolio = false;
+
+    const result = await processChannelPointRedemption(event);
+
+    expect(result).toEqual({
+      id: event.id,
+      status: "skipped",
+      crowns: "0",
+      error: "Check in to the event on KOTH to claim your Crowns before converting Channel Points.",
+    });
+    expect(updateTwitchRedemptionStatus).toHaveBeenCalledWith(
+      event.broadcaster_user_id,
+      event.reward.id,
+      event.id,
+      "access",
+      "CANCELED",
+    );
+    expect(state.redemption).toBeNull();
+    expect(state.crownCredits).toBe(0);
+    expect(state.ledgerWrites).toHaveLength(0);
+  });
+
   test("reserves without crediting while Twitch fulfillment is unconfirmed", async () => {
     updateTwitchRedemptionStatus.mockImplementation(() => Promise.reject(new Error("Unavailable")));
     getTwitchRedemptionStatus.mockImplementation(() => Promise.resolve("UNFULFILLED"));

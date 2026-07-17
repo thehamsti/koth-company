@@ -12,6 +12,7 @@ export type PredictionErrorCode =
   | "AUTH_REQUIRED"
   | "ADMIN_REQUIRED"
   | "EVENT_NOT_FOUND"
+  | "NOT_CHECKED_IN"
   | "MARKET_NOT_FOUND"
   | "MARKET_LOCKED"
   | "QUOTE_EXPIRED"

@@ -10,6 +10,7 @@ const initial = {
     season: 2,
     week: 1,
     status: "draft",
+    startingCrowns: "10000.00000000",
   },
   contestants: [],
   arenas: [],

@@ -15,6 +15,7 @@ import {
 import { getPrices, quoteBuy, quoteSell } from "../market/lmsr";
 import { PredictionError, type PredictionSnapshot, type TradeQuote } from "../types";
 import type {
+  CheckInResult,
   PredictionPublicSnapshot,
   PublicMarketSnapshot,
   ViewerAccountSnapshot,
@@ -32,42 +33,50 @@ function assertEnabled(): void {
   }
 }
 
-async function getOrCreatePortfolio(eventId: string, userId: string) {
+async function getPortfolio(eventId: string, userId: string) {
   const [existing] = await predictionDb
     .select()
     .from(portfolios)
     .where(and(eq(portfolios.eventId, eventId), eq(portfolios.userId, userId)))
     .limit(1);
-  if (existing) return existing;
-  const [event] = await predictionDb.select().from(events).where(eq(events.id, eventId)).limit(1);
-  if (!event)
-    throw new PredictionError("EVENT_NOT_FOUND", "The active event no longer exists.", 404);
-  await predictionDb
-    .insert(portfolios)
-    .values({ eventId, userId, availableCrowns: event.startingCrowns })
-    .onConflictDoNothing({ target: [portfolios.eventId, portfolios.userId] });
-  const [portfolio] = await predictionDb
-    .select()
-    .from(portfolios)
-    .where(and(eq(portfolios.eventId, eventId), eq(portfolios.userId, userId)))
-    .limit(1);
-  if (!portfolio) throw new Error("Portfolio creation failed.");
-  return portfolio;
+  return existing ?? null;
 }
 
-async function getPortfolioForSnapshot(
-  eventId: string,
-  userId: string | undefined,
-  eventStatus: string,
-) {
+async function getPortfolioForSnapshot(eventId: string, userId: string | undefined) {
   if (!userId) return null;
-  if (eventStatus !== "completed") return getOrCreatePortfolio(eventId, userId);
-  const [portfolio] = await predictionDb
+  return getPortfolio(eventId, userId);
+}
+
+export async function checkInViewer(userId: string): Promise<CheckInResult> {
+  assertEnabled();
+  const [event] = await predictionDb
     .select()
-    .from(portfolios)
-    .where(and(eq(portfolios.eventId, eventId), eq(portfolios.userId, userId)))
+    .from(events)
+    .where(inArray(events.status, ["live", "draft", "completed"]))
+    .orderBy(
+      sql`case when ${events.status} in ('live', 'draft') then 0 else 1 end`,
+      desc(events.createdAt),
+    )
     .limit(1);
-  return portfolio ?? null;
+  if (!event || event.status === "completed") {
+    throw new PredictionError("EVENT_NOT_FOUND", "No event is open for check-in yet.", 404);
+  }
+  const created = await predictionDb.transaction(async (tx) => {
+    const [claimed] = await tx
+      .insert(portfolios)
+      .values({ eventId: event.id, userId, availableCrowns: event.startingCrowns })
+      .onConflictDoNothing({ target: [portfolios.eventId, portfolios.userId] })
+      .returning({ id: portfolios.id });
+    if (!claimed) return false;
+    await tx.insert(ledgerEntries).values({
+      portfolioId: claimed.id,
+      kind: "check_in",
+      amount: event.startingCrowns,
+      metadata: { source: "event_check_in" },
+    });
+    return true;
+  });
+  return { alreadyCheckedIn: !created, account: await getViewerAccountSnapshot(userId) };
 }
 
 export async function getPredictionSnapshot(userId?: string): Promise<PredictionSnapshot> {
@@ -101,7 +110,7 @@ export async function getPredictionSnapshot(userId?: string): Promise<Prediction
     };
   }
 
-  const portfolio = await getPortfolioForSnapshot(event.id, userId, event.status);
+  const portfolio = await getPortfolioForSnapshot(event.id, userId);
   const marketRows = await predictionDb
     .select()
     .from(markets)
@@ -261,6 +270,7 @@ export async function getPredictionSnapshot(userId?: string): Promise<Prediction
       season: event.season,
       week: event.week,
       status: event.status,
+      startingCrowns: event.startingCrowns,
     },
     portfolio: portfolio
       ? {
@@ -428,7 +438,7 @@ export async function getViewerAccountSnapshot(userId: string): Promise<ViewerAc
     .limit(1);
   if (!event) return { eventId: null, portfolio: null, sharesByOutcome: {} };
 
-  const portfolio = await getPortfolioForSnapshot(event.id, userId, event.status);
+  const portfolio = await getPortfolioForSnapshot(event.id, userId);
   if (!portfolio) return { eventId: event.id, portfolio: null, sharesByOutcome: {} };
   const marketRows = await predictionDb
     .select({ id: markets.id, liquidity: markets.liquidity, status: markets.status })
@@ -559,7 +569,14 @@ export async function createTradeQuote(input: {
   if (event?.status !== "live") {
     throw new PredictionError("MARKET_LOCKED", "Trading is closed because the event is not live.");
   }
-  const portfolio = await getOrCreatePortfolio(market.eventId, input.userId);
+  const portfolio = await getPortfolio(market.eventId, input.userId);
+  if (!portfolio) {
+    throw new PredictionError(
+      "NOT_CHECKED_IN",
+      "Check in to the event to claim your Crowns before taking a position.",
+      409,
+    );
+  }
   return predictionDb.transaction(async (tx) => {
     const [lockedPortfolio] = await tx
       .select()

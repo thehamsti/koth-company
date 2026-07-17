@@ -3,6 +3,7 @@ import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import {
   events,
+  ledgerEntries,
   marketOutcomes,
   markets,
   portfolios,
@@ -69,10 +70,11 @@ const database = {
   insert: (table: object) => ({
     values: (values: unknown) => {
       inserts.push({ table, values });
+      const returning = () => Promise.resolve(insertReturns.get(table)?.shift() ?? []);
       return {
-        onConflictDoNothing: () => Promise.resolve(),
+        onConflictDoNothing: () => ({ returning }),
         onConflictDoUpdate: () => Promise.resolve(),
-        returning: () => Promise.resolve(insertReturns.get(table)?.shift() ?? []),
+        returning,
       };
     },
   }),
@@ -102,6 +104,7 @@ mock.module("../db", () => ({
 }));
 
 const {
+  checkInViewer,
   createTradeQuote,
   executeTrade,
   getAffectedViewerAccountSnapshots,
@@ -167,6 +170,76 @@ const openOutcomes = [
     settlementValue: null,
   },
 ];
+
+describe("event check-in", () => {
+  const liveEvent = {
+    id: eventId,
+    name: "KOTH",
+    season: 2,
+    week: 1,
+    status: "live",
+    startingCrowns: "10000.00000000",
+  };
+
+  test("claims the starting crowns with an auditable ledger entry", async () => {
+    selectRows.set(events, [[liveEvent], [{ id: eventId, status: "live" }]]);
+    insertReturns.set(portfolios, [[{ id: portfolio.id }]]);
+    selectRows.set(portfolios, [[portfolio]]);
+    selectRows.set(markets, [[]]);
+    selectRows.set(positions, [[]]);
+
+    const result = await checkInViewer(userId);
+
+    expect(result.alreadyCheckedIn).toBe(false);
+    expect(result.account).toEqual({
+      eventId,
+      portfolio: { availableCrowns: portfolio.availableCrowns, equity: "8975.00000000" },
+      sharesByOutcome: {},
+    });
+    expect(inserts.find(({ table }) => table === portfolios)?.values).toMatchObject({
+      eventId,
+      userId,
+      availableCrowns: liveEvent.startingCrowns,
+    });
+    expect(inserts.find(({ table }) => table === ledgerEntries)?.values).toMatchObject({
+      portfolioId: portfolio.id,
+      kind: "check_in",
+      amount: liveEvent.startingCrowns,
+    });
+  });
+
+  test("does not grant crowns twice when the viewer already checked in", async () => {
+    selectRows.set(events, [[liveEvent], [{ id: eventId, status: "live" }]]);
+    insertReturns.set(portfolios, [[]]);
+    selectRows.set(portfolios, [[portfolio]]);
+    selectRows.set(markets, [[]]);
+    selectRows.set(positions, [[]]);
+
+    const result = await checkInViewer(userId);
+
+    expect(result.alreadyCheckedIn).toBe(true);
+    expect(result.account.portfolio?.availableCrowns).toBe(portfolio.availableCrowns);
+    expect(inserts.filter(({ table }) => table === ledgerEntries)).toHaveLength(0);
+  });
+
+  test("rejects check-in when only a completed event remains", async () => {
+    selectRows.set(events, [[{ ...liveEvent, status: "completed" }]]);
+
+    await expect(checkInViewer(userId)).rejects.toThrow("No event is open for check-in");
+    expect(inserts).toHaveLength(0);
+  });
+
+  test("rejects a quote until the viewer checks in", async () => {
+    selectRows.set(markets, [[openMarket]]);
+    selectRows.set(events, [[{ status: "live" }]]);
+    selectRows.set(portfolios, [[]]);
+
+    await expect(
+      createTradeQuote({ userId, marketId, outcomeId, side: "buy", amount: "100" }),
+    ).rejects.toThrow("Check in to the event");
+    expect(inserts).toHaveLength(0);
+  });
+});
 
 describe("prediction trading lifecycle", () => {
   test("reuses an existing portfolio without conflict writes", async () => {

@@ -222,7 +222,7 @@ describe("RealtimeCoordinator", () => {
 
     coordinator.publishPublicChange();
     await waitFor(() => refreshLoads.length === 1);
-    await coordinator.publishChannelPointCredit("user-1");
+    await coordinator.publishAccountRefresh("user-1");
     await Bun.sleep(10);
 
     expect(refreshLoads).toHaveLength(1);

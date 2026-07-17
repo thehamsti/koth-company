@@ -7,6 +7,7 @@ import { authClient } from "../auth-client";
 import { apiErrorMessage } from "../api-error";
 import { createRealtimeWatermarks, realtimePayload } from "../realtime-client";
 import type {
+  CheckInResult,
   MarketSnapshot,
   PredictionPublicSnapshot,
   PredictionSnapshot,
@@ -103,6 +104,7 @@ export function PredictionsClient({ initial }: { initial: PredictionSnapshot }) 
   const [busy, setBusy] = useState(false);
   const [ranking, setRanking] = useState<"event" | "season">("event");
   const [connectionNotice, setConnectionNotice] = useState("");
+  const [checkInBusy, setCheckInBusy] = useState(false);
   const pendingAccount = useRef<ViewerAccountSnapshot | null>(null);
 
   useEffect(() => {
@@ -197,6 +199,32 @@ export function PredictionsClient({ initial }: { initial: PredictionSnapshot }) 
     ? snapshot.markets.find((market) => market.id === selected.marketId)
     : null;
   const predictionNotice = notice || connectionNotice;
+  const canCheckIn = Boolean(
+    session?.user && snapshot.event && snapshot.event.status !== "completed" && !snapshot.portfolio,
+  );
+  const needsCheckIn = Boolean(
+    session?.user && snapshot.event?.status !== "completed" && !snapshot.portfolio,
+  );
+
+  async function checkIn() {
+    setCheckInBusy(true);
+    setNotice("");
+    try {
+      const response = await fetch("/api/predictions/check-in", { method: "POST" });
+      const data = (await response.json()) as CheckInResult & { error?: { message: string } };
+      if (!response.ok) throw new Error(apiErrorMessage(data, "Check-in failed."));
+      if (data.account) setSnapshot((current) => mergeAccount(current, data.account));
+      setNotice(
+        data.alreadyCheckedIn
+          ? "You're already checked in to this event."
+          : `Checked in — ${crowns.format(Number(snapshot.event?.startingCrowns ?? 0))} Crowns added to your balance.`,
+      );
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Check-in failed.");
+    } finally {
+      setCheckInBusy(false);
+    }
+  }
 
   async function requestQuote(side: "buy" | "sell" = "buy") {
     if (!selected || !selectedMarket) return;
@@ -386,6 +414,16 @@ export function PredictionsClient({ initial }: { initial: PredictionSnapshot }) 
             </div>
 
             <aside className="prediction-sidebar">
+              {canCheckIn && snapshot.event ? (
+                <section className="checkin-card">
+                  <span className="prediction-kicker">Event check-in</span>
+                  <h2>Claim {crowns.format(Number(snapshot.event.startingCrowns))} Crowns</h2>
+                  <p>Check in to collect this week&apos;s starting Crowns and open positions.</p>
+                  <button disabled={checkInBusy} onClick={checkIn}>
+                    {checkInBusy ? "Checking in…" : "Check in and claim Crowns"}
+                  </button>
+                </section>
+              ) : null}
               <section className={`trade-ticket${selected && selectedMarket ? " is-active" : ""}`}>
                 <span className="prediction-kicker">Position ticket</span>
                 {selected && selectedMarket ? (
@@ -420,10 +458,16 @@ export function PredictionsClient({ initial }: { initial: PredictionSnapshot }) 
                     </label>
                     {!quote ? (
                       <div className="ticket-actions">
-                        <button disabled={!session || busy} onClick={() => requestQuote("buy")}>
+                        <button
+                          disabled={!session || busy || needsCheckIn}
+                          onClick={() => requestQuote("buy")}
+                        >
                           Preview buy
                         </button>
-                        <button disabled={!session || busy} onClick={() => requestQuote("sell")}>
+                        <button
+                          disabled={!session || busy || needsCheckIn}
+                          onClick={() => requestQuote("sell")}
+                        >
                           Preview sell
                         </button>
                       </div>
@@ -448,7 +492,11 @@ export function PredictionsClient({ initial }: { initial: PredictionSnapshot }) 
                         </button>
                       </div>
                     )}
-                    {!session ? <small>Sign in with Twitch to take a position.</small> : null}
+                    {!session ? (
+                      <small>Sign in with Twitch to take a position.</small>
+                    ) : needsCheckIn ? (
+                      <small>Check in to claim your Crowns before trading.</small>
+                    ) : null}
                   </>
                 ) : (
                   <p>Select an outcome to preview a position.</p>
