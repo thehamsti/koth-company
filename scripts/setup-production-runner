@@ -13,7 +13,7 @@ die() {
 }
 
 # ShellCheck cannot see functions invoked through traps.
-# shellcheck disable=SC2329
+# shellcheck disable=SC2317,SC2329
 cleanup() {
   if [[ -n "$remote_directory" ]]; then
     # The server generated this path and the strict prefix check below rejects shell metacharacters.
