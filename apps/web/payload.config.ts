@@ -33,6 +33,9 @@ export default buildConfig({
     outputFile: path.resolve(dirname, "src/payload-types.ts"),
   },
   db: postgresAdapter({
+    // Schema changes ship exclusively through generated migrations; dev mode must
+    // never push to the shared database (production rejects the batch -1 marker).
+    push: false,
     pool: {
       connectionString: process.env.DATABASE_URI ?? "",
       // Payload reserves one client to monitor reconnects, so a size of one deadlocks every query.
