@@ -188,7 +188,12 @@ main {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.16) 50%, transparent 58%);
+  background: linear-gradient(
+    105deg,
+    transparent 42%,
+    rgba(255, 255, 255, 0.16) 50%,
+    transparent 58%
+  );
   transform: translateX(-130%);
   transition: transform 0.7s var(--ease-out);
   pointer-events: none;
@@ -498,9 +503,7 @@ p {
   position: relative;
   scroll-margin-top: 116px;
   border-top: 1px solid rgba(210, 160, 78, 0.22);
-  background:
-    radial-gradient(circle at top, rgba(45, 52, 49, 0.26), transparent 42%),
-    #0c0e0e;
+  background: radial-gradient(circle at top, rgba(45, 52, 49, 0.26), transparent 42%), #0c0e0e;
 }
 .section-shell {
   width: min(1180px, calc(100% - 40px));
@@ -866,8 +869,7 @@ footer h2 {
 /* ---------- Sponsors ---------- */
 .sponsors {
   background:
-    radial-gradient(circle at 50% 100%, rgba(205, 62, 24, 0.16), transparent 50%),
-    #0b0c0c;
+    radial-gradient(circle at 50% 100%, rgba(205, 62, 24, 0.16), transparent 50%), #0b0c0c;
 }
 .sponsor-grid {
   display: grid;
@@ -894,7 +896,12 @@ footer h2 {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(105deg, transparent 42%, rgba(255, 255, 255, 0.09) 50%, transparent 58%);
+  background: linear-gradient(
+    105deg,
+    transparent 42%,
+    rgba(255, 255, 255, 0.09) 50%,
+    transparent 58%
+  );
   transform: translateX(-130%);
   transition: transform 0.8s var(--ease-out);
   pointer-events: none;
