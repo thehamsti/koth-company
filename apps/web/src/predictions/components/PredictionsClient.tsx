@@ -196,6 +196,7 @@ export function PredictionsClient({ initial }: { initial: PredictionSnapshot }) 
   const selectedMarket = selected
     ? snapshot.markets.find((market) => market.id === selected.marketId)
     : null;
+  const predictionNotice = notice || connectionNotice;
 
   async function requestQuote(side: "buy" | "sell" = "buy") {
     if (!selected || !selectedMarket) return;
@@ -356,11 +357,18 @@ export function PredictionsClient({ initial }: { initial: PredictionSnapshot }) 
                           <button
                             key={outcome.id}
                             disabled={market.status !== "open"}
+                            aria-pressed={
+                              selected?.marketId === market.id && selected.outcomeId === outcome.id
+                            }
                             onClick={() => {
                               setSelected({ marketId: market.id, outcomeId: outcome.id });
                               setQuote(null);
                             }}
-                            className={selected?.outcomeId === outcome.id ? "selected" : ""}
+                            className={
+                              selected?.marketId === market.id && selected.outcomeId === outcome.id
+                                ? "selected"
+                                : ""
+                            }
                           >
                             <span>{outcome.label}</span>
                             <b>{percent.format(outcome.probability)}</b>
@@ -378,10 +386,20 @@ export function PredictionsClient({ initial }: { initial: PredictionSnapshot }) 
             </div>
 
             <aside className="prediction-sidebar">
-              <section className="trade-ticket">
+              <section className={`trade-ticket${selected && selectedMarket ? " is-active" : ""}`}>
                 <span className="prediction-kicker">Position ticket</span>
                 {selected && selectedMarket ? (
                   <>
+                    <button
+                      type="button"
+                      className="trade-ticket-close"
+                      onClick={() => {
+                        setSelected(null);
+                        setQuote(null);
+                      }}
+                    >
+                      Close
+                    </button>
                     <h2>{selectedMarket.title}</h2>
                     <p>
                       {
@@ -439,15 +457,17 @@ export function PredictionsClient({ initial }: { initial: PredictionSnapshot }) 
               <section className="forecaster-board">
                 <div className="market-group-title">
                   <h2>Forecasters</h2>
-                  <div className="ranking-tabs">
+                  <div className="ranking-tabs" role="group" aria-label="Leaderboard period">
                     <button
                       className={ranking === "event" ? "active" : ""}
+                      aria-pressed={ranking === "event"}
                       onClick={() => setRanking("event")}
                     >
                       Event
                     </button>
                     <button
                       className={ranking === "season" ? "active" : ""}
+                      aria-pressed={ranking === "season"}
                       onClick={() => setRanking("season")}
                     >
                       Season
@@ -487,8 +507,8 @@ export function PredictionsClient({ initial }: { initial: PredictionSnapshot }) 
         <p className="prediction-disclaimer">
           Crowns are free and have no monetary value. No purchase, transfer, redemption, or prizes.
         </p>
-        <div className="prediction-notice" aria-live="polite">
-          {notice || connectionNotice}
+        <div className={`prediction-notice${predictionNotice ? " is-visible" : ""}`} role="status">
+          {predictionNotice}
         </div>
       </div>
     </main>

@@ -118,7 +118,7 @@ describe("OperatorControl contestant shortcuts", () => {
     await waitFor(() => expect(screen.getByText("Run Sync rewards again.")).toBeTruthy());
   });
 
-  test("offers the next event after the latest event is completed", async () => {
+  test("submits the next event from the setup form", async () => {
     const requests: RequestInit[] = [];
     const completed = {
       ...initial,
@@ -136,7 +136,7 @@ describe("OperatorControl contestant shortcuts", () => {
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     render(<OperatorControl initial={completed} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Create event" }));
+    fireEvent.submit(screen.getByRole("form", { name: "Prepare the next KOTH" }));
 
     await waitFor(() => expect(requests).toHaveLength(1));
     expect(JSON.parse(String(requests[0]?.body))).toMatchObject({

@@ -148,7 +148,19 @@ export function OperatorControl({ initial }: { initial: OperatorState }) {
               <h2 id="create-event-title">Prepare the next KOTH</h2>
               <p>Create the event first, then load the contestant queue before opening markets.</p>
             </div>
-            <div className="control-setup-form">
+            <form
+              className="control-setup-form"
+              aria-labelledby="create-event-title"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void command({
+                  type: "create_event",
+                  name: eventName,
+                  season: Number(season),
+                  week: Number(week),
+                });
+              }}
+            >
               <label>
                 Event name
                 <input value={eventName} onChange={(event) => setEventName(event.target.value)} />
@@ -172,20 +184,13 @@ export function OperatorControl({ initial }: { initial: OperatorState }) {
                 </label>
               </div>
               <button
+                type="submit"
                 className="control-action control-action-primary"
                 disabled={busy}
-                onClick={() =>
-                  command({
-                    type: "create_event",
-                    name: eventName,
-                    season: Number(season),
-                    week: Number(week),
-                  })
-                }
               >
                 Create event
               </button>
-            </div>
+            </form>
           </section>
         ) : (
           <>

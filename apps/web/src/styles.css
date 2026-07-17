@@ -25,11 +25,13 @@
 }
 html {
   scroll-behavior: smooth;
+  scroll-padding-top: 96px;
   background: var(--ink);
+  -webkit-text-size-adjust: 100%;
 }
 body {
   margin: 0;
-  min-width: 320px;
+  min-width: 0;
   background: var(--ink);
 }
 a {
@@ -37,7 +39,8 @@ a {
   text-decoration: none;
 }
 button,
-a {
+a,
+summary {
   touch-action: manipulation;
 }
 :focus-visible {
@@ -46,7 +49,7 @@ a {
 }
 
 main {
-  overflow: hidden;
+  overflow-x: clip;
   background: radial-gradient(circle at 50% 35%, #152629 0, transparent 28%), var(--ink);
 }
 .site-header {
@@ -87,6 +90,7 @@ main {
 }
 .site-header nav a {
   padding: 12px 0;
+  white-space: nowrap;
   transition: color 0.2s ease;
 }
 .site-header nav a:hover {
@@ -117,9 +121,10 @@ main {
   filter: brightness(1.15);
 }
 .button-small {
-  min-height: 42px;
+  min-height: 44px;
   padding-inline: 18px;
   font-size: 0.72rem;
+  white-space: nowrap;
 }
 .button-secondary {
   background: rgba(8, 14, 15, 0.78);
@@ -215,6 +220,8 @@ h1 small {
   margin: 24px auto 0;
   font: 400 0.85rem/1.8 var(--utility);
   color: #c4b9a8;
+  overflow-wrap: anywhere;
+  scroll-margin-top: 132px;
   text-shadow: 0 2px 4px #000;
 }
 .signup code {
@@ -247,6 +254,7 @@ h1 small {
 
 .section {
   position: relative;
+  scroll-margin-top: 116px;
   border-top: 1px solid rgba(189, 136, 66, 0.25);
   background: radial-gradient(circle at top, rgba(45, 52, 49, 0.26), transparent 42%), #0d0f0f;
 }
@@ -374,11 +382,15 @@ footer h2 {
 }
 .score-list li {
   display: grid;
-  grid-template-columns: 54px 1fr auto;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
   padding: 18px;
   border-bottom: 1px solid #39362e;
   font-family: var(--utility);
   font-variant-numeric: tabular-nums;
+}
+.score-list li strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .powerups {
@@ -607,12 +619,50 @@ footer > p {
   }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1040px) {
+  html {
+    scroll-padding-top: 132px;
+  }
   .site-header {
-    height: 66px;
+    min-height: 112px;
+    height: auto;
+    padding: 10px clamp(14px, 3vw, 28px) 0;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 8px 14px;
+  }
+  .site-header > a:first-child {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .site-header > .button {
+    grid-column: 3;
+    grid-row: 1;
   }
   .site-header nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    max-width: 100%;
+    padding-bottom: 8px;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+    scroll-snap-type: inline proximity;
+  }
+  .site-header nav::-webkit-scrollbar {
     display: none;
+  }
+  .site-header nav a {
+    min-height: 44px;
+    padding: 0 12px;
+    display: inline-flex;
+    align-items: center;
+    flex: 0 0 auto;
+    border-left: 1px solid rgba(189, 136, 66, 0.22);
+    scroll-snap-align: start;
   }
   .site-header .brand {
     font-size: 1.65rem;
@@ -623,13 +673,17 @@ footer > p {
   }
   .hero {
     min-height: 820px;
-    padding-top: 100px;
+    padding-top: 144px;
     background-position: center;
   }
   .rules-layout,
   .leaderboard .section-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 55px;
+  }
+  .rules-layout > *,
+  .leaderboard .section-shell > * {
+    min-width: 0;
   }
   .section-heading h2 br {
     display: none;
@@ -659,16 +713,17 @@ footer > p {
 
 @media (max-width: 620px) {
   .site-header {
-    padding-inline: 14px;
+    padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
   }
   .site-header > a:first-child .brand strong {
     display: none;
   }
   .button-small {
-    padding-inline: 13px;
+    padding-inline: 11px;
   }
   .hero {
-    min-height: 780px;
+    min-height: max(680px, 100svh);
+    padding: 136px 16px 60px;
     background-size: auto 100%;
   }
   h1 span {
@@ -680,10 +735,26 @@ footer > p {
     padding-inline: 14px;
   }
   .signup {
-    font-size: 0.76rem;
+    font-size: 0.84rem;
+    line-height: 1.65;
   }
   .section-shell {
     width: min(100% - 28px, 1180px);
+    padding-block: clamp(64px, 18vw, 86px);
+  }
+  .section-heading,
+  .center-heading {
+    min-width: 0;
+  }
+  .section-heading h2,
+  .center-heading h2,
+  footer h2 {
+    max-width: 100%;
+    font-size: clamp(3.1rem, 16.5vw, 4.6rem);
+    overflow-wrap: anywhere;
+  }
+  .leaderboard .section-heading h2 {
+    font-size: clamp(2.85rem, 15.3vw, 4.25rem);
   }
   .rule-rail li {
     gap: 17px;
@@ -706,8 +777,25 @@ footer > p {
     display: block;
     margin-top: 8px;
   }
+  .viewer-panel {
+    padding: 24px;
+  }
+  .viewer-panel > h2 {
+    font-size: clamp(2.2rem, 13vw, 3.25rem);
+  }
+  .viewer-actions article {
+    padding: 24px;
+  }
+  .donate {
+    width: 100%;
+    line-height: 1.6;
+  }
   .sponsor-grid {
     grid-template-columns: 1fr;
+  }
+  .sponsor-card,
+  .hamsti {
+    min-height: 360px;
   }
   .hamsti {
     grid-column: auto;
@@ -718,6 +806,45 @@ footer > p {
   }
   .footer-actions {
     flex-direction: column;
+  }
+  footer {
+    padding-inline: max(20px, env(safe-area-inset-left)) max(20px, env(safe-area-inset-right));
+    padding-bottom: max(70px, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 380px) {
+  .site-header {
+    gap: 8px 10px;
+  }
+  .button-small {
+    font-size: 0.66rem;
+  }
+  .live-dot {
+    margin-right: 7px;
+  }
+  .rule-rail li {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+  .rule-rail li > span {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 420px) and (max-height: 680px) {
+  .hero {
+    min-height: 640px;
+    padding-block: 126px 52px;
+  }
+  .season {
+    margin-top: 18px;
+  }
+  .slogan {
+    margin-bottom: 18px;
+  }
+  .signup {
+    margin-top: 18px;
   }
 }
 
@@ -738,7 +865,8 @@ footer > p {
 .prediction-page,
 .control-page {
   min-height: 100vh;
-  overflow: visible;
+  min-height: 100svh;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 80% 0%, rgba(53, 184, 208, 0.13), transparent 28rem),
     linear-gradient(145deg, #090b0c 0%, #101617 52%, #090a0a 100%);
@@ -759,6 +887,7 @@ footer > p {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 .prediction-brand img {
   border-radius: 50%;
@@ -781,6 +910,7 @@ footer > p {
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
   font: 600 0.76rem var(--utility);
 }
 .prediction-account > b {
@@ -791,6 +921,7 @@ footer > p {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   padding-left: 14px;
   border-left: 1px solid rgba(189, 136, 66, 0.34);
 }
@@ -849,6 +980,7 @@ button:disabled {
   opacity: 0.45;
 }
 .prediction-quiet {
+  min-height: 44px;
   padding: 8px;
   border: 0;
   color: var(--muted);
@@ -956,6 +1088,7 @@ button:disabled {
 .market-copy h3 {
   margin: 9px 0 0;
   font: 700 1.4rem/1.05 var(--display);
+  overflow-wrap: anywhere;
 }
 .market-state {
   font: 600 0.61rem var(--utility);
@@ -992,7 +1125,9 @@ button:disabled {
   box-shadow: inset 0 0 0 1px var(--spell);
 }
 .market-outcomes button span {
+  min-width: 0;
   font: 600 0.72rem var(--utility);
+  overflow-wrap: anywhere;
 }
 .market-outcomes button b {
   color: white;
@@ -1024,6 +1159,9 @@ button:disabled {
   padding: 22px;
   border: 1px solid var(--line);
   background: rgba(18, 23, 23, 0.96);
+}
+.trade-ticket-close {
+  display: none;
 }
 .trade-ticket h2 {
   margin: 10px 0 6px;
@@ -1099,7 +1237,9 @@ button:disabled {
   font-variant-numeric: tabular-nums;
 }
 .forecaster-board b {
+  min-width: 0;
   display: grid;
+  overflow-wrap: anywhere;
 }
 .forecaster-board b small {
   color: var(--muted);
@@ -1110,6 +1250,8 @@ button:disabled {
   gap: 4px;
 }
 .ranking-tabs button {
+  min-width: 44px;
+  min-height: 44px;
   padding: 5px 7px;
   border: 1px solid #354144;
   background: transparent;
@@ -1128,11 +1270,32 @@ button:disabled {
   font: 500 0.65rem var(--utility);
 }
 .prediction-notice {
-  min-height: 28px;
-  margin-top: 12px;
+  position: fixed;
+  z-index: 40;
+  left: 50%;
+  bottom: max(14px, env(safe-area-inset-bottom));
+  width: min(520px, calc(100% - 24px));
+  min-height: 44px;
+  margin: 0;
+  padding: 12px 16px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #80623d;
+  background: #19140f;
   text-align: center;
   color: #efb26e;
   font: 600 0.7rem var(--utility);
+  opacity: 0;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  transform: translate(-50%, 10px);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+.prediction-notice.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 .prediction-empty {
   max-width: 620px;
@@ -1146,7 +1309,8 @@ button:disabled {
 /* Operator controls */
 .control-page {
   min-height: 100vh;
-  padding-bottom: 80px;
+  min-height: 100svh;
+  padding-bottom: max(80px, env(safe-area-inset-bottom));
   background:
     linear-gradient(rgba(53, 184, 208, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(53, 184, 208, 0.035) 1px, transparent 1px),
@@ -1228,12 +1392,15 @@ button:disabled {
 }
 .control-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 .control-action {
-  min-height: 42px;
+  min-height: 44px;
   padding: 0 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid #526266;
   background: #182124;
   color: white;
@@ -1267,12 +1434,19 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
+}
+.control-event-name > div,
+.control-panel-heading > div,
+.control-disclosure summary span {
+  min-width: 0;
 }
 .control-event-name h2,
 .control-panel-heading h2 {
   margin: 0;
   font: 800 1.6rem/1 var(--display);
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 .control-event-name p {
   margin: 4px 0 0;
@@ -1343,8 +1517,16 @@ button:disabled {
 .control-arena-panel,
 .control-proposals,
 .control-disclosure {
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid #394547;
   background: rgba(14, 19, 20, 0.96);
+}
+.control-workspace > *,
+.control-live-rail > *,
+.control-add-row > *,
+.control-queue-list li > * {
+  min-width: 0;
 }
 .control-panel-heading {
   min-height: 72px;
@@ -1363,7 +1545,7 @@ button:disabled {
 .control-add-row {
   padding: 14px 18px;
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 9px;
   border-bottom: 1px solid #303a3c;
@@ -1439,10 +1621,11 @@ button:disabled {
 }
 .control-row-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
 }
 .control-row-actions button {
-  min-height: 34px;
+  min-height: 44px;
   padding: 0 11px;
   border: 1px solid #496267;
   background: #142023;
@@ -1523,7 +1706,7 @@ button:disabled {
 .automation-summary {
   padding: 14px 18px 0;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 .automation-summary span {
@@ -1556,6 +1739,8 @@ button:disabled {
   border: 1px solid #3b4648;
 }
 .automation-observation {
+  display: block;
+  max-width: calc(100% - 36px);
   margin: 12px 18px 0;
   padding: 9px 10px;
   overflow: hidden;
@@ -1568,6 +1753,7 @@ button:disabled {
 .automation-actions {
   padding: 14px 18px 18px;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 .automation-actions .control-action:first-child {
@@ -1639,6 +1825,7 @@ button:disabled {
 .control-disclosure summary small {
   color: var(--muted);
   font: 500 0.58rem var(--utility);
+  overflow-wrap: anywhere;
 }
 .control-disclosure summary em {
   min-width: 28px;
@@ -1684,6 +1871,7 @@ button:disabled {
 }
 .control-markets li > b {
   font-size: 0.78rem;
+  overflow-wrap: anywhere;
 }
 .control-proposals {
   margin-top: 18px;
@@ -1691,15 +1879,18 @@ button:disabled {
 .control-toast {
   position: fixed;
   z-index: 20;
-  right: 20px;
-  bottom: 20px;
+  right: max(20px, env(safe-area-inset-right));
+  bottom: max(20px, env(safe-area-inset-bottom));
   max-width: min(420px, calc(100% - 40px));
+  max-height: 40dvh;
   padding: 12px 16px;
+  overflow-y: auto;
   border: 1px solid #80623d;
   background: #19140f;
   color: #efb26e;
   font: 600 0.68rem var(--utility);
   opacity: 0;
+  overflow-wrap: anywhere;
   transform: translateY(10px);
   pointer-events: none;
   transition:
@@ -1721,6 +1912,12 @@ button:disabled {
   border: 0;
 }
 
+@media (max-width: 1000px) {
+  .market-card {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 900px) {
   .prediction-layout {
     grid-template-columns: 1fr;
@@ -1728,8 +1925,35 @@ button:disabled {
   .prediction-sidebar {
     position: static;
   }
-  .market-card {
-    grid-template-columns: 1fr;
+  .trade-ticket:not(.is-active) {
+    display: none;
+  }
+  .trade-ticket.is-active {
+    position: fixed;
+    z-index: 30;
+    inset-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    max-height: calc(100svh - 24px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.72);
+  }
+  .trade-ticket-close {
+    min-width: 44px;
+    min-height: 44px;
+    margin: -10px -10px 0 auto;
+    display: grid;
+    place-items: center;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: 700 0.7rem var(--utility);
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  .prediction-layout:has(.trade-ticket.is-active) ~ .prediction-notice {
+    top: max(88px, calc(env(safe-area-inset-top) + 12px));
+    bottom: auto;
   }
   .control-event-strip {
     grid-template-columns: 1fr auto;
@@ -1743,23 +1967,31 @@ button:disabled {
     text-align: left;
   }
   .control-workspace {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .control-live-rail {
     position: static;
-    grid-row: 1;
   }
 }
 @media (max-width: 620px) {
   .prediction-header {
-    align-items: flex-start;
+    padding-inline: max(12px, env(safe-area-inset-left)) max(12px, env(safe-area-inset-right));
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
   }
   .prediction-account {
-    align-items: flex-end;
-    flex-direction: column;
-    gap: 6px;
+    width: 100%;
+    padding-top: 8px;
+    align-items: center;
+    justify-content: flex-end;
+    flex: 1 0 100%;
+    gap: 8px;
+    border-top: 1px solid rgba(189, 136, 66, 0.2);
   }
   .prediction-viewer {
+    flex: 1;
+    justify-content: flex-end;
     padding-left: 0;
     border-left: 0;
   }
@@ -1773,6 +2005,7 @@ button:disabled {
     display: none;
   }
   .prediction-shell {
+    width: min(1380px, calc(100% - 24px));
     padding-top: 34px;
   }
   .prediction-intro {
@@ -1780,7 +2013,10 @@ button:disabled {
     flex-direction: column;
   }
   .prediction-intro h1 {
-    font-size: 4.2rem;
+    font-size: clamp(3.15rem, 18vw, 4.2rem);
+  }
+  .prediction-layout:has(.trade-ticket.is-active) ~ .prediction-notice {
+    top: max(146px, calc(env(safe-area-inset-top) + 12px));
   }
   .prediction-event {
     min-width: 0;
@@ -1792,7 +2028,16 @@ button:disabled {
     grid-template-columns: 1fr 1fr;
   }
   .control-header {
-    align-items: flex-start;
+    position: static;
+    padding-inline: max(14px, env(safe-area-inset-left)) max(14px, env(safe-area-inset-right));
+    align-items: stretch;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .control-header a {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
   }
   .control-shell {
     width: min(100% - 20px, 1320px);
@@ -1819,16 +2064,32 @@ button:disabled {
     justify-content: space-between;
   }
   .control-add-row {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
   }
   .control-shortcuts {
-    grid-column: 1 / -1;
+    display: none;
   }
   .control-queue-list li {
     padding-inline: 12px;
-    grid-template-columns: 30px 1fr;
+    grid-template-columns: 30px minmax(0, 1fr);
   }
   .control-row-actions {
     grid-column: 2;
+  }
+}
+
+@media (max-width: 400px) {
+  .market-outcomes {
+    grid-template-columns: 1fr;
+  }
+  .ticket-actions,
+  .result-actions {
+    grid-template-columns: 1fr;
+  }
+  .control-integration-setup .automation-actions {
+    flex-direction: column;
+  }
+  .control-integration-setup .control-action {
+    width: 100%;
   }
 }

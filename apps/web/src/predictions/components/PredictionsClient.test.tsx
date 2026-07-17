@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { PredictionSnapshot } from "../types";
 import { FakeEventSource } from "../fake-event-source.test-support";
 
@@ -60,12 +60,93 @@ describe("PredictionsClient", () => {
   test("opens a position ticket without implying a valuable wager", () => {
     render(<PredictionsClient initial={snapshot} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Wins 63%/ }));
+    const outcome = screen.getByRole("button", { name: /Wins 63%/ });
+    expect(outcome.getAttribute("aria-pressed")).toBe("false");
 
+    fireEvent.click(outcome);
+
+    expect(outcome.getAttribute("aria-pressed")).toBe("true");
     expect(
       screen.getByRole("heading", { name: "Hydra wins the next arena", level: 2 }),
     ).toBeTruthy();
     expect(screen.getByText("Sign in with Twitch to take a position.")).toBeTruthy();
+    expect(screen.getByText("Position ticket").closest(".trade-ticket")?.classList).toContain(
+      "is-active",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(outcome.getAttribute("aria-pressed")).toBe("false");
+    expect(
+      screen.queryByRole("heading", { name: "Hydra wins the next arena", level: 2 }),
+    ).toBeNull();
+    expect(screen.getByText("Select an outcome to preview a position.")).toBeTruthy();
+    expect(screen.getByText("Position ticket").closest(".trade-ticket")?.classList).not.toContain(
+      "is-active",
+    );
+  });
+
+  test("labels the leaderboard period toggle and exposes its pressed state", () => {
+    render(<PredictionsClient initial={snapshot} />);
+
+    const toggle = screen.getByRole("group", { name: "Leaderboard period" });
+    const event = screen.getByRole("button", { name: "Event" });
+    const season = screen.getByRole("button", { name: "Season" });
+    expect(toggle.contains(event)).toBe(true);
+    expect(toggle.contains(season)).toBe(true);
+    expect(event.getAttribute("aria-pressed")).toBe("true");
+    expect(season.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(season);
+
+    expect(event.getAttribute("aria-pressed")).toBe("false");
+    expect(season.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  test("shows reconnect status through the prediction notice", () => {
+    (globalThis as { EventSource?: typeof EventSource }).EventSource =
+      FakeEventSource as unknown as typeof EventSource;
+    render(<PredictionsClient initial={snapshot} />);
+    const source = FakeEventSource.instances[0];
+    const status = screen.getByRole("status");
+    expect(status.classList).not.toContain("is-visible");
+
+    act(() => source?.dispatchEvent(new Event("error")));
+
+    expect(status.textContent).toBe("Live updates reconnecting…");
+    expect(status.classList).toContain("is-visible");
+
+    act(() => source?.dispatchEvent(new Event("open")));
+
+    expect(status.textContent).toBe("");
+    expect(status.classList).not.toContain("is-visible");
+  });
+
+  test("closing a position ticket discards its quote", async () => {
+    sessionData = { user: { id: "viewer", name: "Hydra" } };
+    globalThis.fetch = mock(() =>
+      Promise.resolve(
+        Response.json({
+          id: "quote",
+          shareAmount: "10",
+          averagePrice: "0.63",
+          crownAmount: "6.3",
+        }),
+      ),
+    ) as unknown as typeof fetch;
+    render(<PredictionsClient initial={snapshot} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Wins 63%/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview buy" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Confirm position" })).toBeTruthy(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    fireEvent.click(screen.getByRole("button", { name: /Wins 63%/ }));
+
+    expect(screen.queryByRole("button", { name: "Confirm position" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Preview buy" })).toBeTruthy();
   });
 
   test("identifies the signed-in Twitch viewer", () => {
