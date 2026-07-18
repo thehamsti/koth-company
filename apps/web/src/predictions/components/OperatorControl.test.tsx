@@ -38,6 +38,7 @@ describe("OperatorControl contestant shortcuts", () => {
             status: "running",
             workerId: "vision-worker",
             lastHeartbeatAt: "2026-07-18T20:00:00.000Z",
+            leaseExpiresAt: null,
             pauseReason: null,
             evidenceImage: null,
             lastObservation: {
