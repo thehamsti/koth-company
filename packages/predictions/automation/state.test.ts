@@ -86,6 +86,23 @@ describe("automation state", () => {
     ).not.toThrow();
   });
 
+  test("allows queue synchronization only while live", () => {
+    expect(() =>
+      validateAutomationTransition(
+        enabled,
+        { eventStatus: "live", arenaStatus: null },
+        { type: "sync_queue" },
+      ),
+    ).not.toThrow();
+    expect(() =>
+      validateAutomationTransition(
+        enabled,
+        { eventStatus: "draft", arenaStatus: null },
+        { type: "sync_queue" },
+      ),
+    ).toThrow("live event");
+  });
+
   test("only records results for locked arenas", () => {
     expect(() =>
       validateAutomationTransition(

@@ -410,6 +410,39 @@ export async function runOperatorCommand(
           })),
         );
       }
+    } else if (command.type === "sync_queue") {
+      if (new Set(command.contestantIds).size !== command.contestantIds.length) {
+        throw new PredictionError("INVALID_COMMAND", "Queue contestants must be unique.");
+      }
+      const roster = await tx
+        .select()
+        .from(contestants)
+        .where(eq(contestants.eventId, eventId))
+        .orderBy(asc(contestants.queuePosition));
+      const byId = new Map(roster.map((contestant) => [contestant.id, contestant]));
+      const requested = command.contestantIds.map((contestantId) => byId.get(contestantId));
+      if (requested.some((contestant) => !contestant)) {
+        throw new PredictionError(
+          "INVALID_COMMAND",
+          "Queue contains a contestant from another event.",
+        );
+      }
+      const requestedIds = new Set(command.contestantIds);
+      const ordered = [
+        ...requested.filter((contestant) => contestant !== undefined),
+        ...roster.filter((contestant) => !requestedIds.has(contestant.id)),
+      ];
+      for (const [index, contestant] of ordered.entries()) {
+        const rezzed = requestedIds.has(contestant.id) && contestant.status === "eliminated";
+        await tx
+          .update(contestants)
+          .set({
+            queuePosition: index + 1,
+            ...(rezzed ? { status: "queued" as const } : {}),
+            updatedAt: new Date(),
+          })
+          .where(eq(contestants.id, contestant.id));
+      }
     } else if (command.type === "open_arena") {
       const contestant = transitionState.contestant!;
       if (command.baselineWins !== undefined && command.baselineWins > contestant.wins) {

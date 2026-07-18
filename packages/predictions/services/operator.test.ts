@@ -414,6 +414,44 @@ describe("operator event completion", () => {
     });
   });
 
+  test("synchronizes queue order and rezzes eliminated contestants", async () => {
+    resetState();
+    const firstId = "00000000-0000-4000-8000-000000000002";
+    const rezzedId = "00000000-0000-4000-8000-000000000003";
+    selectRows.set(domainEvents, [[]]);
+    selectRows.set(events, [[{ id: eventId, status: "live" }]]);
+    selectRows.set(contestants, [
+      [
+        {
+          id: firstId,
+          eventId,
+          displayName: "Hydra",
+          status: "queued",
+          queuePosition: 1,
+        },
+        {
+          id: rezzedId,
+          eventId,
+          displayName: "Rival",
+          status: "eliminated",
+          queuePosition: 2,
+        },
+      ],
+    ]);
+
+    await runOperatorCommand(
+      null,
+      { type: "sync_queue", eventId, contestantIds: [rezzedId, firstId] },
+      "sync-queue-1",
+      "cv",
+    );
+
+    const contestantUpdates = updates.filter(({ table }) => table === contestants);
+    expect(contestantUpdates.map(({ values }) => values.queuePosition)).toEqual([1, 2]);
+    expect(contestantUpdates[0]?.values.status).toBe("queued");
+    expect(contestantUpdates[1]?.values.status).toBeUndefined();
+  });
+
   test("creates the event-winner and live-arena markets and locks the active arena", async () => {
     resetState();
     const contestantId = "00000000-0000-4000-8000-000000000002";

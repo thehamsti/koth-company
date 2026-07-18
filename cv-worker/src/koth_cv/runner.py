@@ -64,6 +64,10 @@ def snapshot_from_payload(payload: dict[str, Any]) -> ServerSnapshot:
         arena_contestant_name=(str(arena_contestant["displayName"]) if arena_contestant else None),
         arena_contestant_wins=(int(arena_contestant["wins"]) if arena_contestant else None),
         unavailable_contestant_names=unavailable_names,
+        all_contestants={str(item["displayName"]): str(item["id"]) for item in contestants},
+        queued_contestant_names=tuple(
+            str(item["displayName"]) for item in contestants if item.get("status") == "queued"
+        ),
     )
 
 
@@ -107,6 +111,7 @@ class Worker:
         return {
             "stream": "connected",
             "roster": list(observation.roster),
+            "queue": list(observation.queue),
             "activeName": observation.active_name,
             "currentWins": observation.current_wins,
             "arenaActive": observation.arena_active,

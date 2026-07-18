@@ -38,6 +38,7 @@ class _RosterPage:
 @dataclass(frozen=True)
 class Observation:
     roster: tuple[str, ...] = ()
+    queue: tuple[str, ...] = ()
     active_name: str | None = None
     current_wins: int | None = None
     arena_active: bool = False
@@ -56,6 +57,8 @@ class ServerSnapshot:
     arena_contestant_name: str | None = None
     arena_contestant_wins: int | None = None
     unavailable_contestant_names: frozenset[str] = frozenset()
+    all_contestants: dict[str, str] = field(default_factory=dict)
+    queued_contestant_names: tuple[str, ...] = ()
 
 
 class DecisionEngine:
@@ -66,6 +69,7 @@ class DecisionEngine:
         self.arena_active = ConsecutiveValue[bool](3)
         self.result = ConsecutiveValue[bool](3)
         self.result_issue = ConsecutiveValue[str](3)
+        self.queue_order = ConsecutiveValue[tuple[str, ...]](3)
         self.last_server_state: tuple[str, str | None, str | None] | None = None
         self.draft_server_names: set[str] | None = None
         self.emitted_for_state: set[str] = set()
@@ -84,6 +88,7 @@ class DecisionEngine:
             self.arena_active.reset()
             self.result.reset()
             self.result_issue.reset()
+            self.queue_order.reset()
             self.draft_server_names = None
             self.last_server_state = server_state
 
@@ -94,6 +99,7 @@ class DecisionEngine:
             self.arena_active.reset()
             self.result.reset()
             self.result_issue.reset()
+            self.queue_order.reset()
             self.draft_server_names = None
             return None
 
@@ -183,6 +189,23 @@ class DecisionEngine:
 
         if snapshot.event_status != "live":
             return None
+
+        observed_queue = tuple(
+            name_identity(name) for name in observation.queue if normalize_name(name)
+        )
+        stable_queue = self.queue_order.push(observed_queue or None)
+        if stable_queue:
+            all_contestants = {
+                name_identity(name): contestant_id
+                for name, contestant_id in snapshot.all_contestants.items()
+            }
+            queued_server = tuple(name_identity(name) for name in snapshot.queued_contestant_names)
+            if all(identity in all_contestants for identity in stable_queue):
+                queue_ids = [all_contestants[identity] for identity in stable_queue]
+                fingerprint = f"queue:{','.join(queue_ids)}"
+                if stable_queue != queued_server and fingerprint not in self.emitted_for_state:
+                    self.emitted_for_state.add(fingerprint)
+                    return {"type": "sync_queue", "contestantIds": queue_ids}
 
         pause_reason = observation.metadata.get("pauseReason")
         if isinstance(pause_reason, str) and "ambiguous" not in self.emitted_for_state:

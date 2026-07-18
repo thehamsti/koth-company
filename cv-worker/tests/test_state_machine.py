@@ -176,6 +176,29 @@ def test_queue_identity_ignores_ocr_accent_variation_without_changing_the_label(
         assert engine.observe(Observation(roster=("Kapten", "Oldp", "Nedj")), state) is None
 
 
+def test_syncs_live_queue_order_and_rezzes_an_eliminated_contestant() -> None:
+    rival_id = "00000000-0000-4000-8000-000000000005"
+    engine = DecisionEngine()
+    state = ServerSnapshot(
+        event_id=EVENT_ID,
+        event_status="live",
+        contestants={"Hydra": CONTESTANT_ID},
+        arena_id=None,
+        arena_status=None,
+        unavailable_contestant_names=frozenset({"rival"}),
+        all_contestants={"Hydra": CONTESTANT_ID, "Rival": rival_id},
+        queued_contestant_names=("Hydra",),
+    )
+    observation = Observation(queue=("Rival", "Hydra"))
+
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) == {
+        "type": "sync_queue",
+        "contestantIds": [rival_id, CONTESTANT_ID],
+    }
+
+
 def test_live_identity_ignores_ocr_accent_variation() -> None:
     engine = DecisionEngine()
     state = ServerSnapshot(

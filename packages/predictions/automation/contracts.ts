@@ -31,6 +31,11 @@ export const automationAction = z.discriminatedUnion("type", [
   z.object({ type: z.literal("remove_contestant"), ...base, contestantId: z.uuid() }),
   z.object({ type: z.literal("activate_event"), ...base }),
   z.object({
+    type: z.literal("sync_queue"),
+    ...base,
+    contestantIds: z.array(z.uuid()).min(1).max(100),
+  }),
+  z.object({
     type: z.literal("open_arena"),
     ...base,
     contestantId: z.uuid(),

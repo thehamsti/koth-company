@@ -196,6 +196,7 @@ export async function runAutomationAction(
     | { type: "add_contestant"; eventId: string; displayName: string; queuePosition: number }
     | { type: "remove_contestant"; eventId: string; contestantId: string }
     | { type: "activate_event"; eventId: string }
+    | { type: "sync_queue"; eventId: string; contestantIds: string[] }
     | { type: "open_arena"; eventId: string; contestantId: string; baselineWins?: number }
     | { type: "start_arena"; eventId: string; arenaId: string }
     | {
@@ -234,6 +235,8 @@ export async function runAutomationAction(
     };
   } else if (action.type === "activate_event") {
     command = { type: "activate_event", eventId: event.id };
+  } else if (action.type === "sync_queue") {
+    command = { type: "sync_queue", eventId: event.id, contestantIds: action.contestantIds };
   } else if (action.type === "open_arena") {
     const [contestant] = await predictionDb
       .select({ id: contestants.id })

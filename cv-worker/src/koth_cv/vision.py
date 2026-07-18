@@ -183,7 +183,7 @@ class VisionDetector:
 
     def _overlay(
         self, frame: np.ndarray
-    ) -> tuple[tuple[str, ...], str | None, int | None, dict[str, object]] | None:
+    ) -> tuple[tuple[str, ...], tuple[str, ...], str | None, int | None, dict[str, object]] | None:
         region = self.layout.regions.get("overlay")
         if not region:
             return None
@@ -257,7 +257,7 @@ class VisionDetector:
         roster = self._positioned_roster(roster_detections)
 
         if not leaderboard_box or not current_player_box:
-            return roster, None, None, overlay_metadata
+            return roster, roster, None, None, overlay_metadata
 
         leaderboard_detections = [
             (text, box)
@@ -291,7 +291,7 @@ class VisionDetector:
         overlay_metadata["leaderboard"] = leaderboard
 
         if not (leaderboard_box[1] < current_player_box[1] < queue_box[1]):
-            return roster, None, None, overlay_metadata
+            return roster, roster, None, None, overlay_metadata
 
         active_detections = [
             (text, box)
@@ -339,7 +339,7 @@ class VisionDetector:
             if identity and identity not in seen_participants:
                 seen_participants.add(identity)
                 unique_participants.append(participant)
-        return tuple(unique_participants), active_name, current_wins, overlay_metadata
+        return tuple(unique_participants), roster, active_name, current_wins, overlay_metadata
 
     def _result_signal(self, frame: np.ndarray) -> tuple[bool, float, str | None]:
         values = self._ocr(frame, "result")
@@ -368,7 +368,7 @@ class VisionDetector:
         if overlay is None:
             return Observation(metadata={"overlayVisible": False})
 
-        roster, active_name, current_wins, overlay_metadata = overlay
+        roster, queue, active_name, current_wins, overlay_metadata = overlay
         start_visible, start_confidence, start_text = self._start_signal(frame)
         result_visible, result_confidence, result_text = self._result_signal(frame)
         metadata: dict[str, object] = {
@@ -386,6 +386,7 @@ class VisionDetector:
             metadata["startText"] = start_text
         return Observation(
             roster=roster,
+            queue=queue,
             active_name=active_name,
             current_wins=current_wins,
             arena_active=start_visible,

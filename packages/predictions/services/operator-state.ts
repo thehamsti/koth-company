@@ -6,6 +6,7 @@ export type OperatorCommand =
   | { type: "remove_contestant"; eventId: string; contestantId: string }
   | { type: "create_threshold"; eventId: string; contestantId: string; threshold: number }
   | { type: "activate_event"; eventId: string }
+  | { type: "sync_queue"; eventId: string; contestantIds: string[] }
   | {
       type: "open_arena";
       eventId: string;
@@ -113,6 +114,8 @@ export function validateOperatorTransition(
     if (event.status !== "draft") {
       throw new PredictionError("INVALID_COMMAND", "Only draft events can be activated.");
     }
+  } else if (command.type === "sync_queue") {
+    requireLiveEvent(event, "Synchronizing the queue");
   } else if (command.type === "create_threshold") {
     requireLiveEvent(event, "Creating a threshold market");
     const contestant = requireAvailableContestant(state.contestant, event.id);

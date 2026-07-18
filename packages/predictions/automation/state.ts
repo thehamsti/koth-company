@@ -16,6 +16,7 @@ type AutomationAction = {
     | "add_contestant"
     | "remove_contestant"
     | "activate_event"
+    | "sync_queue"
     | "open_arena"
     | "start_arena"
     | "record_result";
