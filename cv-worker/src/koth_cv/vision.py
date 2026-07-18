@@ -120,9 +120,7 @@ class VisionDetector:
                 names.append(name)
                 expected_rank += 1
             return tuple(names)
-        known_centers = {
-            rank: box[1] + box[3] / 2 for rank, box in rank_boxes.items()
-        }
+        known_centers = {rank: box[1] + box[3] / 2 for rank, box in rank_boxes.items()}
         ordered_ranks = sorted(known_centers)
         steps = [
             (known_centers[right] - known_centers[left]) / (right - left)
@@ -167,8 +165,7 @@ class VisionDetector:
                 for index, (name, box) in enumerate(candidates)
                 if index not in used_candidates
                 and box[0] > rank_box[0] + rank_box[2] / 2
-                and abs(box[1] + box[3] / 2 - rank_center)
-                <= max(rank_box[3], box[3]) / 2
+                and abs(box[1] + box[3] / 2 - rank_center) <= max(rank_box[3], box[3]) / 2
             ]
             if not matches:
                 break
@@ -235,8 +232,7 @@ class VisionDetector:
             prize_values = [
                 text
                 for text, box in detections
-                if box[1] + box[3] / 2 > prize_box[1]
-                and box[1] + box[3] / 2 < leaderboard_box[1]
+                if box[1] + box[3] / 2 > prize_box[1] and box[1] + box[3] / 2 < leaderboard_box[1]
             ]
             prize_match = re.search(r"\$\s*([\d,]+)", " ".join(prize_values))
             if prize_match:

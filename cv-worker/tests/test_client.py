@@ -34,7 +34,9 @@ def test_action_error_includes_the_server_message() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             400,
-            json={"error": {"code": "INVALID_COMMAND", "message": "Automation worker is not running."}},
+            json={
+                "error": {"code": "INVALID_COMMAND", "message": "Automation worker is not running."}
+            },
         )
 
     client = AutomationClient("http://localhost:4000", "secret")

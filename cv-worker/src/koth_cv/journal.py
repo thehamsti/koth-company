@@ -52,9 +52,7 @@ class ActionJournal:
     def archive(self) -> Path | None:
         if not self.path.exists():
             return None
-        archived = self.path.with_name(
-            f"{self.path.stem}.stale-{uuid.uuid4()}{self.path.suffix}"
-        )
+        archived = self.path.with_name(f"{self.path.stem}.stale-{uuid.uuid4()}{self.path.suffix}")
         self.path.replace(archived)
         return archived
 
