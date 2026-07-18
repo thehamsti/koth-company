@@ -76,6 +76,16 @@ describe("automation state", () => {
     ).not.toThrow();
   });
 
+  test("allows automation to activate a draft event", () => {
+    expect(() =>
+      validateAutomationTransition(
+        enabled,
+        { eventStatus: "draft", arenaStatus: null },
+        { type: "activate_event" },
+      ),
+    ).not.toThrow();
+  });
+
   test("only records results for locked arenas", () => {
     expect(() =>
       validateAutomationTransition(

@@ -6,7 +6,12 @@ export type OperatorCommand =
   | { type: "remove_contestant"; eventId: string; contestantId: string }
   | { type: "create_threshold"; eventId: string; contestantId: string; threshold: number }
   | { type: "activate_event"; eventId: string }
-  | { type: "open_arena"; eventId: string; contestantId: string }
+  | {
+      type: "open_arena";
+      eventId: string;
+      contestantId: string;
+      baselineWins?: number;
+    }
   | { type: "start_arena"; eventId: string; arenaId: string }
   | { type: "record_result"; eventId: string; arenaId: string; contestantWon: boolean }
   | { type: "correct_result"; eventId: string; arenaId: string; contestantWon: boolean }

@@ -164,6 +164,21 @@ class DecisionEngine:
                         self.emitted_for_state.add(fingerprint)
                         page.forget(identity)
                         return {"type": "remove_contestant", "contestantId": contestant_id}
+
+            observed_active = normalize_name(observation.active_name or "")
+            observed_active_identity = name_identity(observed_active) if observed_active else None
+            stable_active = self.active_name.push(observed_active_identity)
+            roster_is_synced = (
+                len(existing) >= 2 and bool(observed_keys) and observed_keys.issubset(existing)
+            )
+            if (
+                stable_active
+                and stable_active in existing
+                and roster_is_synced
+                and "activate-event" not in self.emitted_for_state
+            ):
+                self.emitted_for_state.add("activate-event")
+                return {"type": "activate_event"}
             return None
 
         if snapshot.event_status != "live":
@@ -202,7 +217,10 @@ class DecisionEngine:
                     "type": "pause",
                     "reason": f"Unknown live contestant: {stable_name}",
                 }
-            return {"type": "open_arena", "contestantId": contestant_id}
+            action: dict[str, Any] = {"type": "open_arena", "contestantId": contestant_id}
+            if observation.current_wins is not None:
+                action["baselineWins"] = observation.current_wins
+            return action
 
         if snapshot.arena_status == "open":
             active = self.arena_active.push(observation.arena_active or None)

@@ -49,6 +49,15 @@ class ActionJournal:
                 "only after verifying whether the pending action reached the server."
             ) from exc
 
+    def archive(self) -> Path | None:
+        if not self.path.exists():
+            return None
+        archived = self.path.with_name(
+            f"{self.path.stem}.stale-{uuid.uuid4()}{self.path.suffix}"
+        )
+        self.path.replace(archived)
+        return archived
+
     def acknowledge(self, idempotency_key: str) -> None:
         current = self.pending()
         if current and current.idempotency_key == idempotency_key:

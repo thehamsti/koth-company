@@ -7,7 +7,9 @@ from koth_cv.vision import VisionDetector
 OVERLAY_MARKER = 99
 SHIFTED_OVERLAY_MARKER = 98
 QUEUE_ONLY_MARKER = 97
+NOISY_QUEUE_MARKER = 96
 START_MARKER = 30
+ARENA_MARKER = 31
 PURPLE_RESULT_MARKER = 40
 GOLD_RESULT_MARKER = 50
 
@@ -16,6 +18,10 @@ class StubOcr:
     def read(self, image: np.ndarray) -> list[tuple[str, float]]:
         return {
             START_MARKER: [("Shadowsight", 0.97), ("spawns in 95 sec", 0.96)],
+            ARENA_MARKER: [
+                ("Purple Team: 2 Players Remaining", 0.98),
+                ("Gold Team: 2 Players Remaining", 0.98),
+            ],
             PURPLE_RESULT_MARKER: [("Purple Team Wins", 0.97)],
             GOLD_RESULT_MARKER: [("Gold", 0.98), ("Team Wins", 0.96)],
         }.get(int(image[0, 0, 0]), [])
@@ -29,6 +35,26 @@ class StubOcr:
                 ("Queue:", 0.99, (0, 10, 20, 5)),
                 ("1. Hydra", 0.96, (0, 16, 20, 5)),
                 ("2. Other", 0.96, (0, 22, 20, 5)),
+            ]
+        if marker == NOISY_QUEUE_MARKER:
+            return [
+                ("Prize:", 0.99, (0, 0, 12, 5)),
+                ("$1050", 0.99, (13, 0, 12, 5)),
+                ("Leaderboard:", 0.99, (0, 6, 30, 5)),
+                ("Previous", 0.99, (0, 12, 15, 5)),
+                ("Wins: 4", 0.99, (20, 12, 15, 5)),
+                ("Current player:", 0.99, (0, 20, 35, 5)),
+                ("Hydra", 0.99, (0, 26, 15, 5)),
+                ("Wins: 2", 0.99, (20, 26, 15, 5)),
+                ("Queue:", 0.99, (0, 34, 20, 5)),
+                ("1.", 0.99, (0, 40, 5, 5)),
+                ("First", 0.99, (7, 40, 12, 5)),
+                ("2.", 0.99, (0, 46, 5, 5)),
+                ("Second", 0.99, (7, 46, 12, 5)),
+                ("7", 0.99, (25, 46, 4, 5)),
+                ("Third", 0.99, (7, 52, 12, 5)),
+                ("4.", 0.99, (0, 58, 5, 5)),
+                ("Fourth", 0.99, (7, 58, 12, 5)),
             ]
         if marker not in {OVERLAY_MARKER, SHIFTED_OVERLAY_MARKER}:
             return []
@@ -68,6 +94,19 @@ def test_detector_combines_dynamic_overlay_and_start_ocr() -> None:
     assert observation.arena_active is True
 
 
+def test_detector_recognizes_the_live_arena_team_counter() -> None:
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    frame[0:60, 0:50] = OVERLAY_MARKER
+    frame[60:80, 60:80] = ARENA_MARKER
+
+    observation = VisionDetector(layout(), StubOcr()).detect(frame)
+
+    assert observation.arena_active is True
+    assert observation.metadata["startText"] == (
+        "Purple Team: 2 Players Remaining Gold Team: 2 Players Remaining"
+    )
+
+
 def test_detector_derives_player_and_queue_after_their_vertical_positions_shift() -> None:
     frame = np.zeros((100, 100, 3), dtype=np.uint8)
     frame[0:60, 0:50] = SHIFTED_OVERLAY_MARKER
@@ -90,6 +129,30 @@ def test_detector_returns_no_signals_when_dynamic_overlay_anchors_are_missing() 
     assert observation.arena_active is False
     assert observation.result_visible is False
     assert observation.metadata == {"overlayVisible": False}
+
+
+def test_detector_reads_all_four_overlay_zones_and_ignores_icon_digits_in_queue() -> None:
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    frame[0:60, 0:50] = NOISY_QUEUE_MARKER
+
+    observation = VisionDetector(layout(), StubOcr()).detect(frame)
+
+    assert observation.roster == (
+        "Previous",
+        "Hydra",
+        "First",
+        "Second",
+        "Third",
+        "Fourth",
+    )
+    assert observation.metadata["zones"] == {
+        "prize": True,
+        "leaderboard": True,
+        "currentPlayer": True,
+        "queue": True,
+    }
+    assert observation.metadata["prizeValue"] == 1050
+    assert observation.metadata["leaderboard"] == [{"name": "Previous", "wins": 4}]
 
 
 def test_detector_reads_a_draft_queue_without_live_player_sections() -> None:

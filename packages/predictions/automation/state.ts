@@ -12,7 +12,13 @@ type DomainState = {
 };
 
 type AutomationAction = {
-  type: "add_contestant" | "remove_contestant" | "open_arena" | "start_arena" | "record_result";
+  type:
+    | "add_contestant"
+    | "remove_contestant"
+    | "activate_event"
+    | "open_arena"
+    | "start_arena"
+    | "record_result";
 };
 
 export type AutomationStatus = "disabled" | "paused" | "stale" | "running";
@@ -81,9 +87,13 @@ export function validateAutomationTransition(
       "Contestants can only be changed on a draft event.",
     );
   }
+  if (action.type === "activate_event" && state.eventStatus !== "draft") {
+    throw new PredictionError("INVALID_COMMAND", "Automation can only activate a draft event.");
+  }
   if (
     action.type !== "add_contestant" &&
     action.type !== "remove_contestant" &&
+    action.type !== "activate_event" &&
     state.eventStatus !== "live"
   ) {
     throw new PredictionError("INVALID_COMMAND", "Arena automation requires a live event.");

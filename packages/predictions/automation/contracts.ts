@@ -29,7 +29,13 @@ export const automationAction = z.discriminatedUnion("type", [
     displayName: z.string().trim().min(1).max(50),
   }),
   z.object({ type: z.literal("remove_contestant"), ...base, contestantId: z.uuid() }),
-  z.object({ type: z.literal("open_arena"), ...base, contestantId: z.uuid() }),
+  z.object({ type: z.literal("activate_event"), ...base }),
+  z.object({
+    type: z.literal("open_arena"),
+    ...base,
+    contestantId: z.uuid(),
+    baselineWins: z.int().min(0).max(999).optional(),
+  }),
   z.object({ type: z.literal("start_arena"), ...base, arenaId: z.uuid() }),
   z.object({
     type: z.literal("record_result"),

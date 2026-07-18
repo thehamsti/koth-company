@@ -398,6 +398,53 @@ def test_loop_fails_closed_on_stream_loss_and_recovers_vision_failures(
     assert "retrying" in caplog.text
 
 
+def test_loop_heartbeats_when_pending_action_recovery_fails(tmp_path: Path) -> None:
+    class StaleLeaseClient:
+        def __init__(self) -> None:
+            self.actions: list[dict[str, object]] = []
+
+        def action(self, action: dict[str, object], _key: str) -> dict[str, object]:
+            self.actions.append(action)
+            if action["type"] == "add_contestant":
+                raise RuntimeError("Automation worker is not running")
+            return {"id": None}
+
+    client = StaleLeaseClient()
+    journal = ActionJournal(tmp_path / "pending-loop.json")
+    journal.stage(
+        {
+            "type": "add_contestant",
+            "displayName": "Hydra",
+            "eventId": "event",
+            "workerId": "worker:1",
+        }
+    )
+    worker = Worker(
+        client=client,
+        detector=lambda _frame: Observation(),
+        journal=journal,
+        worker_id="worker:1",
+    )
+    clock = FakeClock()
+    feed = ScriptedFeed(clock, [(0, automation_update("revision-1", status="stale"))])
+
+    cli._run_worker_frames(
+        UnexpectedSource(),
+        client=client,
+        worker=worker,
+        worker_id="worker:1",
+        dry_run=False,
+        fps=2,
+        takeover=False,
+        monotonic=clock,
+        state_feed=feed,
+        max_iterations=1,
+    )
+
+    assert [action["type"] for action in client.actions] == ["add_contestant", "heartbeat"]
+    assert journal.pending() is not None
+
+
 def test_loop_waits_on_the_stream_when_there_is_no_event(tmp_path: Path) -> None:
     class IdleClient:
         def state(self) -> dict[str, object]:

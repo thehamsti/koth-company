@@ -22,6 +22,20 @@ AUTOMATION_STREAM_READ_TIMEOUT = 30.0
 logger = logging.getLogger(__name__)
 
 
+def raise_for_status(response: httpx.Response) -> None:
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        detail = response.text.strip()
+        if not detail:
+            raise
+        raise httpx.HTTPStatusError(
+            f"{exc}; server response: {detail[:1000]}",
+            request=response.request,
+            response=response,
+        ) from exc
+
+
 def signed_headers(
     *,
     secret: str,
@@ -62,7 +76,7 @@ class AutomationClient:
             idempotency_key=str(uuid.uuid4()),
         )
         response = self.http.get(f"{self.server_url}{path}", headers=headers)
-        response.raise_for_status()
+        raise_for_status(response)
         return response.json()
 
     def action(self, action: dict[str, Any], idempotency_key: str) -> dict[str, Any]:
@@ -80,7 +94,7 @@ class AutomationClient:
             content=body,
             headers={**headers, "content-type": "application/json"},
         )
-        response.raise_for_status()
+        raise_for_status(response)
         return response.json()
 
     def states(self) -> Iterator[AutomationState]:

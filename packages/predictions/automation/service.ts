@@ -195,7 +195,8 @@ export async function runAutomationAction(
   let command:
     | { type: "add_contestant"; eventId: string; displayName: string; queuePosition: number }
     | { type: "remove_contestant"; eventId: string; contestantId: string }
-    | { type: "open_arena"; eventId: string; contestantId: string }
+    | { type: "activate_event"; eventId: string }
+    | { type: "open_arena"; eventId: string; contestantId: string; baselineWins?: number }
     | { type: "start_arena"; eventId: string; arenaId: string }
     | {
         type: "record_result";
@@ -231,6 +232,8 @@ export async function runAutomationAction(
       eventId: event.id,
       contestantId: action.contestantId,
     };
+  } else if (action.type === "activate_event") {
+    command = { type: "activate_event", eventId: event.id };
   } else if (action.type === "open_arena") {
     const [contestant] = await predictionDb
       .select({ id: contestants.id })
@@ -246,7 +249,12 @@ export async function runAutomationAction(
     if (!contestant) {
       throw new PredictionError("INVALID_COMMAND", "Contestant is not available for this event.");
     }
-    command = { type: "open_arena", eventId: event.id, contestantId: action.contestantId };
+    command = {
+      type: "open_arena",
+      eventId: event.id,
+      contestantId: action.contestantId,
+      baselineWins: action.baselineWins,
+    };
   } else if (action.type === "start_arena") {
     command = { type: "start_arena", eventId: event.id, arenaId: action.arenaId };
   } else {

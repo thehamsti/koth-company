@@ -6,7 +6,6 @@ import pytest
 
 from koth_cv.journal import ActionJournal
 from koth_cv.runner import (
-    PendingActionConflictError,
     RetryableWorkerError,
     Worker,
     automation_ready,
@@ -113,7 +112,9 @@ def test_worker_sends_a_stable_action_with_worker_identity(tmp_path: Path) -> No
         assert worker.process(frame, payload) is None
     worker.process(frame, payload)
 
-    assert client.actions[0][0] == {
+    assert [action[0]["type"] for action in client.actions] == ["heartbeat", "open_arena"]
+    assert client.actions[0][0]["observation"]["activeName"] == "Hydra"
+    assert client.actions[1][0] == {
         "type": "open_arena",
         "contestantId": "contestant",
         "eventId": "event",
@@ -163,12 +164,13 @@ def test_reconciles_a_lost_pause_response_even_when_server_is_now_paused(
         }
     )
 
-    assert recovered == pending.action
-    assert client.actions == [(pending.action, pending.idempotency_key)]
+    expected = {**pending.action, "workerId": "new-worker"}
+    assert recovered == expected
+    assert client.actions == [(expected, pending.idempotency_key)]
     assert journal.pending() is None
 
 
-def test_pending_action_is_retained_when_current_event_does_not_match(tmp_path: Path) -> None:
+def test_pending_action_is_archived_when_current_event_does_not_match(tmp_path: Path) -> None:
     client = StubClient()
     journal = ActionJournal(tmp_path / "mismatch-journal.json")
     pending = journal.stage(
@@ -185,11 +187,14 @@ def test_pending_action_is_retained_when_current_event_does_not_match(tmp_path: 
         worker_id="new-worker",
     )
 
-    with pytest.raises(PendingActionConflictError, match=r"old-event.*new-event.*retained"):
-        worker.recover_pending({"event": {"id": "new-event", "status": "live"}})
+    recovered = worker.recover_pending({"event": {"id": "new-event", "status": "live"}})
 
+    assert recovered is None
     assert client.actions == []
-    assert journal.pending() == pending
+    assert journal.pending() is None
+    archived = list(tmp_path.glob("mismatch-journal.stale-*.json"))
+    assert len(archived) == 1
+    assert pending.idempotency_key in archived[0].read_text()
 
 
 def test_vision_errors_are_marked_retryable_without_staging_an_action(tmp_path: Path) -> None:

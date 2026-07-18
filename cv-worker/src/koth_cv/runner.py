@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import logging
+import uuid
 from dataclasses import asdict
 from typing import Any, Protocol
 
@@ -26,6 +28,9 @@ class RetryableWorkerError(RuntimeError):
 
 class PendingActionConflictError(RuntimeError):
     pass
+
+
+logger = logging.getLogger(__name__)
 
 
 def automation_ready(status: str, *, dry_run: bool) -> bool:
@@ -93,6 +98,21 @@ class Worker:
         self.worker_id = worker_id
         self.dry_run = dry_run
         self.engine = DecisionEngine()
+        self.last_observation: Observation | None = None
+
+    def heartbeat_observation(self) -> dict[str, Any]:
+        observation = self.last_observation
+        if observation is None:
+            return {"stream": "connected"}
+        return {
+            "stream": "connected",
+            "roster": list(observation.roster),
+            "activeName": observation.active_name,
+            "currentWins": observation.current_wins,
+            "arenaActive": observation.arena_active,
+            "resultVisible": observation.result_visible,
+            **observation.metadata,
+        }
 
     def recover_pending(self, payload: dict[str, Any]) -> dict[str, Any] | None:
         pending = self.journal.pending()
@@ -109,18 +129,24 @@ class Worker:
             )
         if current_event_id != pending_event_id:
             current = str(current_event_id) if current_event_id else "no current event"
-            raise PendingActionConflictError(
-                f"Pending {action_type} action belongs to event {pending_event_id}, but the "
-                f"server reports {current}; journal retained at {self.journal.path}"
+            archived = self.journal.archive()
+            logger.warning(
+                "Archived obsolete pending %s action for event %s because the server reports %s: %s",
+                action_type,
+                pending_event_id,
+                current,
+                archived,
             )
+            return None
+        recovery_action = {**pending.action, "workerId": self.worker_id}
         try:
-            self.client.action(pending.action, pending.idempotency_key)
+            self.client.action(recovery_action, pending.idempotency_key)
         except Exception as exc:
             raise RetryableWorkerError(
                 f"pending {action_type} action delivery failed: {exc}"
             ) from exc
         self.journal.acknowledge(pending.idempotency_key)
-        return pending.action
+        return recovery_action
 
     def process(self, frame: np.ndarray, payload: dict[str, Any]) -> dict[str, Any] | None:
         try:
@@ -129,6 +155,7 @@ class Worker:
             raise RetryableWorkerError(f"automation state could not be processed: {exc}") from exc
         try:
             observation = self.detector.detect(frame)
+            self.last_observation = observation
         except Exception as exc:
             raise RetryableWorkerError(f"vision detection failed: {exc}") from exc
         decision = self.engine.observe(observation, snapshot)
@@ -149,6 +176,16 @@ class Worker:
             return action
         pending = self.journal.stage(action)
         try:
+            if decision["type"] != "pause":
+                self.client.action(
+                    {
+                        "type": "heartbeat",
+                        "eventId": snapshot.event_id,
+                        "workerId": self.worker_id,
+                        "observation": self.heartbeat_observation(),
+                    },
+                    str(uuid.uuid4()),
+                )
             self.client.action(pending.action, pending.idempotency_key)
         except Exception as exc:
             raise RetryableWorkerError(f"{decision['type']} action delivery failed: {exc}") from exc

@@ -411,11 +411,22 @@ export async function runOperatorCommand(
         );
       }
     } else if (command.type === "open_arena") {
+      const contestant = transitionState.contestant!;
+      if (command.baselineWins !== undefined && command.baselineWins > contestant.wins) {
+        await tx
+          .update(contestants)
+          .set({
+            wins: command.baselineWins,
+            bestStreak: sql`greatest(${contestants.bestStreak}, ${command.baselineWins})`,
+            status: "active",
+            updatedAt: new Date(),
+          })
+          .where(eq(contestants.id, contestant.id));
+      }
       const [{ total }] = await tx
         .select({ total: count() })
         .from(arenas)
         .where(eq(arenas.eventId, eventId));
-      const contestant = transitionState.contestant!;
       const [arena] = await tx
         .insert(arenas)
         .values({ eventId, contestantId: contestant.id, ordinal: total + 1 })

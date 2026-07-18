@@ -41,6 +41,25 @@ describe("automation action contract", () => {
     ).toMatchObject({ type: "heartbeat", takeover: true });
   });
 
+  test("accepts automatic event activation and an observed arena baseline", () => {
+    expect(
+      automationAction.parse({
+        type: "activate_event",
+        eventId,
+        workerId: "hydramist-mac",
+      }),
+    ).toMatchObject({ type: "activate_event" });
+    expect(
+      automationAction.parse({
+        type: "open_arena",
+        eventId,
+        workerId: "hydramist-mac",
+        contestantId,
+        baselineWins: 2,
+      }),
+    ).toMatchObject({ type: "open_arena", baselineWins: 2 });
+  });
+
   test("accepts removing a contestant from a draft roster", () => {
     expect(
       automationAction.parse({

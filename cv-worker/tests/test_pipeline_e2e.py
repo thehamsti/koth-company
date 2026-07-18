@@ -190,6 +190,8 @@ class FakeAutomationClient:
 
     def _apply(self, action: dict[str, Any]) -> None:
         action_type = action["type"]
+        if action_type == "heartbeat":
+            return
         if action_type == "add_contestant":
             assert self.event_status == "draft"
             self.contestants.append(
@@ -347,9 +349,12 @@ def test_full_vision_worker_lifecycle_recovers_exactly_once_and_pauses_safely(
         "record_result",
         "pause",
     ]
-    assert len({idempotency_key for _, idempotency_key in client.attempts}) == len(
-        client.applied_actions
-    )
+    mutation_keys = {
+        idempotency_key
+        for action, idempotency_key in client.attempts
+        if action["type"] != "heartbeat"
+    }
+    assert len(mutation_keys) == len(client.applied_actions)
 
 
 def test_empty_queue_does_not_remove_an_unmatched_draft_server_roster(

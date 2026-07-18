@@ -38,6 +38,26 @@ def test_adds_a_stable_draft_roster_name() -> None:
     }
 
 
+def test_activates_a_synced_draft_when_current_player_is_stable() -> None:
+    engine = DecisionEngine()
+    state = ServerSnapshot(
+        event_id=EVENT_ID,
+        event_status="draft",
+        contestants={
+            "Hydra": CONTESTANT_ID,
+            "Rival": "00000000-0000-4000-8000-000000000005",
+        },
+        arena_id=None,
+        arena_status=None,
+    )
+    observation = Observation(roster=("Hydra", "Rival"), active_name="Hydra", current_wins=2)
+
+    for _ in range(3):
+        assert engine.observe(observation, state) is None
+
+    assert engine.observe(observation, state) == {"type": "activate_event"}
+
+
 def test_removes_a_contestant_only_after_ten_visible_absent_roster_reads() -> None:
     engine = DecisionEngine()
     state = ServerSnapshot(
@@ -307,11 +327,12 @@ def test_opens_arena_after_four_of_six_active_name_reads() -> None:
     state = snapshot()
 
     for name in ["Hydra", None, "Hydra", "Hydra", None]:
-        assert engine.observe(Observation(active_name=name), state) is None
+        assert engine.observe(Observation(active_name=name, current_wins=2), state) is None
 
-    assert engine.observe(Observation(active_name="Hydra"), state) == {
+    assert engine.observe(Observation(active_name="Hydra", current_wins=2), state) == {
         "type": "open_arena",
         "contestantId": CONTESTANT_ID,
+        "baselineWins": 2,
     }
 
 

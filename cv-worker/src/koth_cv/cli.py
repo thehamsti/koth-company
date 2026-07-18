@@ -174,6 +174,8 @@ def _run_worker_frames(
             if state is None:
                 continue
 
+            pending_recovery_failed = False
+            recovered: dict[str, object] | None = None
             if not dry_run:
                 try:
                     recovered = worker.recover_pending(state)
@@ -182,6 +184,7 @@ def _run_worker_frames(
                 except RetryableWorkerError as exc:
                     stop_capture()
                     next_frame_at = now + interval
+                    pending_recovery_failed = True
                     _log_transient_failure(
                         last_error_logs,
                         operation="reconcile the pending action",
@@ -189,7 +192,6 @@ def _run_worker_frames(
                         now=now,
                         worker_id=worker_id,
                     )
-                    continue
                 if recovered:
                     logger.info(
                         "Worker %s reconciled pending %s action for event %s",
@@ -230,7 +232,7 @@ def _run_worker_frames(
                     "type": "heartbeat",
                     "eventId": event_id,
                     "workerId": worker_id,
-                    "observation": {"stream": "connected"},
+                    "observation": worker.heartbeat_observation(),
                 }
                 if takeover_pending:
                     heartbeat["takeover"] = True
@@ -253,6 +255,9 @@ def _run_worker_frames(
                 if owner != worker_id:
                     awaiting_revision = revision
                     stop_capture()
+
+            if pending_recovery_failed:
+                continue
 
             ready = automation_ready(str(status), dry_run=dry_run) and (
                 dry_run or (enabled and owner == worker_id and awaiting_revision is None)
