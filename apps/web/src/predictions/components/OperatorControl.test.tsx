@@ -26,6 +26,40 @@ afterEach(() => {
 });
 
 describe("OperatorControl contestant shortcuts", () => {
+  test("shows the detected current player and leaderboard wins", () => {
+    render(
+      <OperatorControl
+        initial={{
+          ...initial,
+          event: { ...initial.event, status: "live" },
+          automation: {
+            enabled: true,
+            paused: false,
+            status: "running",
+            workerId: "vision-worker",
+            lastHeartbeatAt: "2026-07-18T20:00:00.000Z",
+            pauseReason: null,
+            evidenceImage: null,
+            lastObservation: {
+              activeName: "Carry",
+              currentWins: 5,
+              leaderboard: [
+                { name: "Neepzén", wins: 10 },
+                { name: "Myrtilles", wins: 7 },
+              ],
+            },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.getByText("Current player")).toBeTruthy();
+    expect(screen.getByText("Carry")).toBeTruthy();
+    expect(screen.getByText("5 wins")).toBeTruthy();
+    expect(screen.getByText("Neepzén")).toBeTruthy();
+    expect(screen.getByText("10")).toBeTruthy();
+  });
+
   test("applies streamed operator state without polling", () => {
     (globalThis as { EventSource?: typeof EventSource }).EventSource =
       FakeEventSource as unknown as typeof EventSource;

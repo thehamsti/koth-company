@@ -376,20 +376,55 @@ class DecisionEngine:
             return action
 
         if snapshot.arena_status == "open":
-            active = self.arena_active.push(observation.arena_active or None)
+            expected_identity = name_identity(snapshot.arena_contestant_name or "")
+            observed_identity = name_identity(observation.active_name or "")
+            counter_advanced = (
+                expected_identity
+                and observed_identity == expected_identity
+                and snapshot.arena_contestant_wins is not None
+                and observation.current_wins is not None
+                and observation.current_wins > snapshot.arena_contestant_wins
+            )
+            player_changed = (
+                expected_identity and observed_identity and observed_identity != expected_identity
+            )
+            active = self.arena_active.push(
+                observation.arena_active or counter_advanced or player_changed or None
+            )
             if active and "start" not in self.emitted_for_state:
                 self.emitted_for_state.add("start")
                 return {"type": "start_arena", "arenaId": snapshot.arena_id}
             return None
 
         if snapshot.arena_status == "locked":
-            if not observation.result_visible or observation.result_confidence < 0.90:
+            expected_name = normalize_name(snapshot.arena_contestant_name or "")
+            observed_name = normalize_name(observation.active_name or "")
+            if observation.result_visible and observation.result_confidence < 0.90:
                 self.result.reset()
                 self.result_issue.reset()
                 return None
+            if not observation.result_visible:
+                inferred_result: bool | None = None
+                if expected_name and observed_name:
+                    if name_identity(observed_name) != name_identity(expected_name):
+                        inferred_result = False
+                    elif (
+                        snapshot.arena_contestant_wins is not None
+                        and observation.current_wins is not None
+                        and observation.current_wins > snapshot.arena_contestant_wins
+                    ):
+                        inferred_result = True
+                self.result_issue.reset()
+                result = self.result.push(inferred_result)
+                if result is not None and "result" not in self.emitted_for_state:
+                    self.emitted_for_state.add("result")
+                    return {
+                        "type": "record_result",
+                        "arenaId": snapshot.arena_id,
+                        "contestantWon": result,
+                    }
+                return None
 
-            expected_name = normalize_name(snapshot.arena_contestant_name or "")
-            observed_name = normalize_name(observation.active_name or "")
             issue: str | None = None
             qualified: bool | None = None
             if not expected_name or snapshot.arena_contestant_wins is None:

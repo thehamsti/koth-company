@@ -513,6 +513,19 @@ def test_ignores_a_stale_eliminated_player_then_opens_the_next_contestant() -> N
     }
 
 
+def test_recovers_a_missed_start_when_the_open_arena_counter_advanced() -> None:
+    engine = DecisionEngine()
+    state = snapshot(arena_status="open", wins=2)
+    observation = Observation(active_name="Hydra", current_wins=3)
+
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) == {
+        "type": "start_arena",
+        "arenaId": ARENA_ID,
+    }
+
+
 def test_starts_an_open_arena_after_three_active_frames() -> None:
     engine = DecisionEngine()
     state = snapshot(arena_status="open")
@@ -543,6 +556,34 @@ def test_new_arena_requires_new_start_frames() -> None:
     assert engine.observe(Observation(arena_active=True), second) == {
         "type": "start_arena",
         "arenaId": NEXT_ARENA_ID,
+    }
+
+
+def test_records_a_win_when_result_title_was_missed_but_counter_advanced() -> None:
+    engine = DecisionEngine()
+    state = snapshot(arena_status="locked", wins=2)
+    observation = Observation(active_name="Hydra", current_wins=3)
+
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) == {
+        "type": "record_result",
+        "arenaId": ARENA_ID,
+        "contestantWon": True,
+    }
+
+
+def test_records_a_loss_when_result_title_was_missed_and_current_player_changed() -> None:
+    engine = DecisionEngine()
+    state = snapshot(arena_status="locked", wins=2)
+    observation = Observation(active_name="Rival", current_wins=0)
+
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) == {
+        "type": "record_result",
+        "arenaId": ARENA_ID,
+        "contestantWon": False,
     }
 
 

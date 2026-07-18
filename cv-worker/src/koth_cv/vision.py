@@ -400,7 +400,7 @@ class VisionDetector:
             "purpleteam" in normalized
             and "goldteam" in normalized
             and normalized.count("playersremaining") >= 2
-        )
+        ) or ("playersremaining" in normalized and "shadowsightsready" in normalized)
         if countdown_visible or team_counter_visible:
             return True, max(score for _value, score in values), text
         return False, 0.0, None

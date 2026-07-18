@@ -19,8 +19,8 @@ class StubOcr:
         return {
             START_MARKER: [("Shadowsight", 0.97), ("spawns in 95 sec", 0.96)],
             ARENA_MARKER: [
-                ("Purple Team: 2 Players Remaining", 0.98),
-                ("Gold Team: 2 Players Remaining", 0.98),
+                ("Team: 2 Players Remaining", 0.98),
+                ("Shadowsights Ready", 0.98),
             ],
             PURPLE_RESULT_MARKER: [("Purple Team Wins", 0.97)],
             GOLD_RESULT_MARKER: [("Gold", 0.98), ("Team Wins", 0.96)],
@@ -102,9 +102,7 @@ def test_detector_recognizes_the_live_arena_team_counter() -> None:
     observation = VisionDetector(layout(), StubOcr()).detect(frame)
 
     assert observation.arena_active is True
-    assert observation.metadata["startText"] == (
-        "Purple Team: 2 Players Remaining Gold Team: 2 Players Remaining"
-    )
+    assert observation.metadata["startText"] == ("Team: 2 Players Remaining Shadowsights Ready")
 
 
 def test_detector_derives_player_and_queue_after_their_vertical_positions_shift() -> None:

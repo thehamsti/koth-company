@@ -128,6 +128,42 @@ export function OperatorControl({ initial }: { initial: OperatorState }) {
     ? new Date(state.automation.lastHeartbeatAt).getTime()
     : null;
   const automationStatus = state.automation?.status ?? "disabled";
+  const observation = state.automation?.lastObservation ?? {};
+  const observedActiveName =
+    typeof observation.activeName === "string" ? observation.activeName : null;
+  const observedCurrentWins =
+    typeof observation.currentWins === "number" ? observation.currentWins : null;
+  const currentPlayer = observedActiveName
+    ? state.contestants.find(
+        (entry) =>
+          entry.displayName.localeCompare(observedActiveName, undefined, {
+            sensitivity: "base",
+          }) === 0,
+      )
+    : state.contestants.find((entry) => entry.status === "active");
+  const currentPlayerName = observedActiveName ?? currentPlayer?.displayName ?? null;
+  const currentPlayerWins = observedCurrentWins ?? currentPlayer?.wins ?? null;
+  const observedLeaderboard = Array.isArray(observation.leaderboard)
+    ? observation.leaderboard.flatMap((entry) => {
+        if (
+          typeof entry === "object" &&
+          entry !== null &&
+          "name" in entry &&
+          typeof entry.name === "string" &&
+          "wins" in entry &&
+          typeof entry.wins === "number"
+        ) {
+          return [{ name: entry.name, wins: entry.wins }];
+        }
+        return [];
+      })
+    : [];
+  const leaderboard = observedLeaderboard.length
+    ? observedLeaderboard
+    : state.contestants
+        .filter((entry) => entry.status === "eliminated")
+        .map((entry) => ({ name: entry.displayName, wins: entry.wins }))
+        .sort((left, right) => right.wins - left.wins || left.name.localeCompare(right.name));
 
   return (
     <main className="control-page">
@@ -363,6 +399,36 @@ export function OperatorControl({ initial }: { initial: OperatorState }) {
               </section>
 
               <aside className="control-live-rail">
+                <section className="control-overlay-panel" aria-labelledby="overlay-state-title">
+                  <div className="control-panel-heading">
+                    <div>
+                      <span>Detected overlay</span>
+                      <h2 id="overlay-state-title">KOTH state</h2>
+                    </div>
+                    <b>{leaderboard.length}</b>
+                  </div>
+                  <div className="control-current-player">
+                    <span>Current player</span>
+                    <strong>{currentPlayerName ?? "Not detected"}</strong>
+                    <b>{currentPlayerWins ?? "—"} wins</b>
+                  </div>
+                  <div className="control-detected-leaderboard">
+                    <span>Leaderboard</span>
+                    {leaderboard.length ? (
+                      <ol>
+                        {leaderboard.map((entry, index) => (
+                          <li key={`${entry.name}-${index}`}>
+                            <i>{index + 1}</i>
+                            <strong>{entry.name}</strong>
+                            <b>{entry.wins}</b>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <p>No leaderboard rows detected.</p>
+                    )}
+                  </div>
+                </section>
                 <section className="control-automation-panel" aria-labelledby="automation-title">
                   <div className="control-panel-heading">
                     <div>

@@ -2080,6 +2080,7 @@ button:disabled {
   align-items: start;
 }
 .control-queue-panel,
+.control-overlay-panel,
 .control-automation-panel,
 .control-arena-panel,
 .control-proposals,
@@ -2237,6 +2238,81 @@ button:disabled {
   top: 104px;
   display: grid;
   gap: 12px;
+}
+.control-overlay-panel {
+  border-color: #4c4940;
+}
+.control-current-player {
+  padding: 17px 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 14px;
+  border-bottom: 1px solid #303a3c;
+  background: linear-gradient(90deg, rgba(215, 173, 105, 0.1), transparent 72%);
+}
+.control-current-player > span,
+.control-detected-leaderboard > span {
+  grid-column: 1 / -1;
+  color: #8d9694;
+  font: 650 0.55rem var(--utility);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.control-current-player strong {
+  overflow: hidden;
+  color: var(--bone);
+  font: 750 1.2rem var(--display);
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.control-current-player b {
+  align-self: end;
+  color: var(--gold);
+  font: 700 0.72rem var(--utility);
+  font-variant-numeric: tabular-nums;
+}
+.control-detected-leaderboard {
+  padding: 15px 18px 18px;
+}
+.control-detected-leaderboard ol {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.control-detected-leaderboard li {
+  min-height: 31px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #283234;
+}
+.control-detected-leaderboard li:last-child {
+  border-bottom: 0;
+}
+.control-detected-leaderboard i {
+  color: #697270;
+  font: 600 0.58rem var(--utility);
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+}
+.control-detected-leaderboard strong {
+  overflow: hidden;
+  font: 650 0.68rem var(--utility);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.control-detected-leaderboard b {
+  color: var(--gold);
+  font: 700 0.68rem var(--utility);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.control-detected-leaderboard p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 0.68rem;
 }
 .control-automation-panel {
   border-color: #3d4f52;
