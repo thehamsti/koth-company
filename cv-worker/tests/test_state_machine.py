@@ -265,6 +265,46 @@ def test_syncs_live_leaderboard_and_current_player_roles_between_arenas() -> Non
     }
 
 
+def test_live_partial_overlay_positions_do_not_starve_arena_opening() -> None:
+    engine = DecisionEngine()
+    state = ServerSnapshot(
+        event_id=EVENT_ID,
+        event_status="live",
+        contestants={"Hydra": CONTESTANT_ID, "Rival": "00000000-0000-4000-8000-000000000005"},
+        arena_id=None,
+        arena_status=None,
+        all_contestants={
+            "Hydra": CONTESTANT_ID,
+            "Rival": "00000000-0000-4000-8000-000000000005",
+        },
+        contestant_states={
+            "Hydra": ("active", 5, 15),
+            "Rival": ("queued", 0, 1),
+        },
+        queued_contestant_names=("Rival",),
+    )
+    observation = Observation(
+        queue=("Rival",),
+        active_name="Hydra",
+        current_wins=5,
+        metadata={
+            "participantStates": [
+                {"name": "Rival", "status": "queued", "wins": 0, "queuePosition": 1},
+                {"name": "Hydra", "status": "active", "wins": 5, "queuePosition": 2},
+            ]
+        },
+    )
+
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) is None
+    assert engine.observe(observation, state) == {
+        "type": "open_arena",
+        "contestantId": CONTESTANT_ID,
+        "baselineWins": 5,
+    }
+
+
 def test_syncs_live_queue_order_and_rezzes_an_eliminated_contestant() -> None:
     rival_id = "00000000-0000-4000-8000-000000000005"
     engine = DecisionEngine()

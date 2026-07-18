@@ -300,7 +300,8 @@ class DecisionEngine:
                         "queuePosition": queue_position,
                     }
                 )
-                if server_states.get(identity) != (status, wins, queue_position):
+                server_state = server_states.get(identity)
+                if server_state is None or server_state[:2] != (status, wins):
                     roles_are_synced = False
             fingerprint = "live-roles:" + ",".join(
                 f"{entry['contestantId']}:{entry['status']}:{entry['wins']}:{entry['queuePosition']}"
