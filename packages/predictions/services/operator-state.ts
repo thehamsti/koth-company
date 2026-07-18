@@ -128,10 +128,10 @@ export function validateOperatorTransition(
       throw new PredictionError("INVALID_COMMAND", "Only queued contestants can be removed.");
     }
   } else if (command.type === "sync_roster") {
-    if (event.status !== "draft") {
+    if (event.status !== "draft" && event.status !== "live") {
       throw new PredictionError(
         "INVALID_COMMAND",
-        "Contestant roles can only be synchronized on a draft event.",
+        "Contestant roles require a draft or live event.",
       );
     }
   } else if (command.type === "activate_event") {

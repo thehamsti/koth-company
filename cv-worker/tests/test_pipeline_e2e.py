@@ -195,8 +195,24 @@ class FakeAutomationClient:
         if action_type == "add_contestant":
             assert self.event_status == "draft"
             self.contestants.append(
-                {"id": CONTESTANT_ID, "displayName": str(action["displayName"]), "wins": 0}
+                {
+                    "id": CONTESTANT_ID,
+                    "displayName": str(action["displayName"]),
+                    "status": action.get("status", "queued"),
+                    "queuePosition": action.get("queuePosition", 1),
+                    "wins": int(action.get("wins", 0)),
+                }
             )
+        elif action_type == "sync_roster":
+            for desired in action["contestants"]:
+                contestant = next(
+                    entry for entry in self.contestants if entry["id"] == desired["contestantId"]
+                )
+                contestant.update(
+                    status=desired["status"],
+                    wins=desired["wins"],
+                    queuePosition=desired["queuePosition"],
+                )
         elif action_type == "remove_contestant":
             assert self.event_status == "draft"
             self.contestants = [
@@ -270,10 +286,19 @@ def test_full_vision_worker_lifecycle_recovers_exactly_once_and_pauses_safely(
         "eventId": EVENT_ID,
         "workerId": "hydramist-test",
     }
-    assert client.contestants == [{"id": CONTESTANT_ID, "displayName": "Hydra", "wins": 0}]
+    assert client.contestants == [
+        {
+            "id": CONTESTANT_ID,
+            "displayName": "Hydra",
+            "status": "queued",
+            "queuePosition": 1,
+            "wins": 0,
+        }
+    ]
 
     client.activate_event()
     active_frame = synthetic_stream.frame(active_name="Hydra")
+    assert worker.process(active_frame, client.state_payload())["type"] == "sync_roster"
     for _ in range(3):
         assert worker.process(active_frame, client.state_payload()) is None
     with pytest.raises(RuntimeError, match="response was lost"):
@@ -347,6 +372,7 @@ def test_full_vision_worker_lifecycle_recovers_exactly_once_and_pauses_safely(
 
     assert [action["type"] for action in client.applied_actions] == [
         "add_contestant",
+        "sync_roster",
         "open_arena",
         "start_arena",
         "record_result",

@@ -262,6 +262,58 @@ class DecisionEngine:
         if snapshot.event_status != "live":
             return None
 
+        participant_states = observation.metadata.get("participantStates")
+        if (
+            snapshot.arena_status is None
+            and isinstance(participant_states, list)
+            and participant_states
+        ):
+            contestants_by_identity = {
+                name_identity(name): contestant_id
+                for name, contestant_id in snapshot.all_contestants.items()
+            }
+            server_states = {
+                name_identity(name): state for name, state in snapshot.contestant_states.items()
+            }
+            desired_states: list[dict[str, object]] = []
+            roles_are_synced = True
+            for entry in participant_states:
+                if not isinstance(entry, dict):
+                    continue
+                identity = name_identity(str(entry.get("name", "")))
+                contestant_id = contestants_by_identity.get(identity)
+                status = entry.get("status")
+                wins = entry.get("wins")
+                queue_position = entry.get("queuePosition")
+                if (
+                    not contestant_id
+                    or status not in {"queued", "active", "eliminated"}
+                    or not isinstance(wins, int)
+                    or not isinstance(queue_position, int)
+                ):
+                    continue
+                desired_states.append(
+                    {
+                        "contestantId": contestant_id,
+                        "status": status,
+                        "wins": wins,
+                        "queuePosition": queue_position,
+                    }
+                )
+                if server_states.get(identity) != (status, wins, queue_position):
+                    roles_are_synced = False
+            fingerprint = "live-roles:" + ",".join(
+                f"{entry['contestantId']}:{entry['status']}:{entry['wins']}:{entry['queuePosition']}"
+                for entry in desired_states
+            )
+            if (
+                desired_states
+                and not roles_are_synced
+                and fingerprint not in self.emitted_for_state
+            ):
+                self.emitted_for_state.add(fingerprint)
+                return {"type": "sync_roster", "contestants": desired_states}
+
         observed_queue = tuple(
             name_identity(name) for name in observation.queue if normalize_name(name)
         )

@@ -81,15 +81,20 @@ export function validateAutomationTransition(
   if (!session.enabled) throw new PredictionError("INVALID_COMMAND", "Automation is disabled.");
   if (session.paused) throw new PredictionError("INVALID_COMMAND", "Automation is paused.");
   if (
-    (action.type === "add_contestant" ||
-      action.type === "remove_contestant" ||
-      action.type === "sync_roster") &&
+    (action.type === "add_contestant" || action.type === "remove_contestant") &&
     state.eventStatus !== "draft"
   ) {
     throw new PredictionError(
       "INVALID_COMMAND",
       "Contestants can only be changed on a draft event.",
     );
+  }
+  if (
+    action.type === "sync_roster" &&
+    state.eventStatus !== "draft" &&
+    state.eventStatus !== "live"
+  ) {
+    throw new PredictionError("INVALID_COMMAND", "Contestant roles require a draft or live event.");
   }
   if (action.type === "activate_event" && state.eventStatus !== "draft") {
     throw new PredictionError("INVALID_COMMAND", "Automation can only activate a draft event.");

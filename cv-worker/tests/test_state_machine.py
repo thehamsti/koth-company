@@ -222,6 +222,49 @@ def test_queue_identity_ignores_ocr_accent_variation_without_changing_the_label(
         assert engine.observe(Observation(roster=("Kapten", "Oldp", "Nedj")), state) is None
 
 
+def test_syncs_live_leaderboard_and_current_player_roles_between_arenas() -> None:
+    rival_id = "00000000-0000-4000-8000-000000000005"
+    engine = DecisionEngine()
+    state = ServerSnapshot(
+        event_id=EVENT_ID,
+        event_status="live",
+        contestants={"Hydra": CONTESTANT_ID, "Rival": rival_id},
+        arena_id=None,
+        arena_status=None,
+        all_contestants={"Hydra": CONTESTANT_ID, "Rival": rival_id},
+        contestant_states={
+            "Hydra": ("queued", 0, 1),
+            "Rival": ("queued", 0, 2),
+        },
+    )
+    observation = Observation(
+        metadata={
+            "participantStates": [
+                {"name": "Hydra", "status": "active", "wins": 2, "queuePosition": 1},
+                {"name": "Rival", "status": "eliminated", "wins": 4, "queuePosition": 2},
+            ]
+        }
+    )
+
+    assert engine.observe(observation, state) == {
+        "type": "sync_roster",
+        "contestants": [
+            {
+                "contestantId": CONTESTANT_ID,
+                "status": "active",
+                "wins": 2,
+                "queuePosition": 1,
+            },
+            {
+                "contestantId": rival_id,
+                "status": "eliminated",
+                "wins": 4,
+                "queuePosition": 2,
+            },
+        ],
+    }
+
+
 def test_syncs_live_queue_order_and_rezzes_an_eliminated_contestant() -> None:
     rival_id = "00000000-0000-4000-8000-000000000005"
     engine = DecisionEngine()
