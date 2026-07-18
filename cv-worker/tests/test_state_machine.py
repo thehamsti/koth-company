@@ -189,7 +189,7 @@ def test_syncs_live_queue_order_and_rezzes_an_eliminated_contestant() -> None:
         all_contestants={"Hydra": CONTESTANT_ID, "Rival": rival_id},
         queued_contestant_names=("Hydra",),
     )
-    observation = Observation(queue=("Rival", "Hydra"))
+    observation = Observation(queue=("Rival", "LateSignup", "Hydra"))
 
     assert engine.observe(observation, state) is None
     assert engine.observe(observation, state) is None

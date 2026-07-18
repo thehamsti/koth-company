@@ -200,10 +200,16 @@ class DecisionEngine:
                 for name, contestant_id in snapshot.all_contestants.items()
             }
             queued_server = tuple(name_identity(name) for name in snapshot.queued_contestant_names)
-            if all(identity in all_contestants for identity in stable_queue):
-                queue_ids = [all_contestants[identity] for identity in stable_queue]
+            known_queue = tuple(
+                identity for identity in stable_queue if identity in all_contestants
+            )
+            if known_queue:
+                queue_ids = [all_contestants[identity] for identity in known_queue]
                 fingerprint = f"queue:{','.join(queue_ids)}"
-                if stable_queue != queued_server and fingerprint not in self.emitted_for_state:
+                if (
+                    known_queue != queued_server[: len(known_queue)]
+                    and fingerprint not in self.emitted_for_state
+                ):
                     self.emitted_for_state.add(fingerprint)
                     return {"type": "sync_queue", "contestantIds": queue_ids}
 
