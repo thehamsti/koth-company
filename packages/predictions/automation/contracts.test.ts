@@ -66,6 +66,14 @@ describe("automation action contract", () => {
         contestantIds: [contestantId],
       }),
     ).toMatchObject({ type: "sync_queue", contestantIds: [contestantId] });
+    expect(
+      automationAction.parse({
+        type: "sync_roster",
+        eventId,
+        workerId: "hydramist-mac",
+        contestants: [{ contestantId, status: "eliminated", wins: 4, queuePosition: 2 }],
+      }),
+    ).toMatchObject({ type: "sync_roster" });
   });
 
   test("accepts removing a contestant from a draft roster", () => {

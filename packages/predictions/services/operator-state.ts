@@ -2,8 +2,25 @@ import { PredictionError } from "../types";
 
 export type OperatorCommand =
   | { type: "create_event"; name: string; season: number; week: number }
-  | { type: "add_contestant"; eventId: string; displayName: string; queuePosition?: number }
+  | {
+      type: "add_contestant";
+      eventId: string;
+      displayName: string;
+      queuePosition?: number;
+      status?: "queued" | "active" | "eliminated";
+      wins?: number;
+    }
   | { type: "remove_contestant"; eventId: string; contestantId: string }
+  | {
+      type: "sync_roster";
+      eventId: string;
+      contestants: Array<{
+        contestantId: string;
+        status: "queued" | "active" | "eliminated";
+        wins: number;
+        queuePosition: number;
+      }>;
+    }
   | { type: "create_threshold"; eventId: string; contestantId: string; threshold: number }
   | { type: "activate_event"; eventId: string }
   | { type: "sync_queue"; eventId: string; contestantIds: string[] }
@@ -109,6 +126,13 @@ export function validateOperatorTransition(
     const contestant = requireAvailableContestant(state.contestant, event.id);
     if (contestant.status !== "queued") {
       throw new PredictionError("INVALID_COMMAND", "Only queued contestants can be removed.");
+    }
+  } else if (command.type === "sync_roster") {
+    if (event.status !== "draft") {
+      throw new PredictionError(
+        "INVALID_COMMAND",
+        "Contestant roles can only be synchronized on a draft event.",
+      );
     }
   } else if (command.type === "activate_event") {
     if (event.status !== "draft") {

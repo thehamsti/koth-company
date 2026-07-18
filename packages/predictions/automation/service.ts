@@ -193,8 +193,25 @@ export async function runAutomationAction(
   }
 
   let command:
-    | { type: "add_contestant"; eventId: string; displayName: string; queuePosition: number }
+    | {
+        type: "add_contestant";
+        eventId: string;
+        displayName: string;
+        queuePosition: number;
+        status?: "queued" | "active" | "eliminated";
+        wins?: number;
+      }
     | { type: "remove_contestant"; eventId: string; contestantId: string }
+    | {
+        type: "sync_roster";
+        eventId: string;
+        contestants: Array<{
+          contestantId: string;
+          status: "queued" | "active" | "eliminated";
+          wins: number;
+          queuePosition: number;
+        }>;
+      }
     | { type: "activate_event"; eventId: string }
     | { type: "sync_queue"; eventId: string; contestantIds: string[] }
     | { type: "open_arena"; eventId: string; contestantId: string; baselineWins?: number }
@@ -219,7 +236,11 @@ export async function runAutomationAction(
       type: "add_contestant",
       eventId: event.id,
       displayName: action.displayName,
-      queuePosition: Math.max(0, ...roster.map(({ queuePosition }) => queuePosition ?? 0)) + 1,
+      queuePosition:
+        action.queuePosition ??
+        Math.max(0, ...roster.map(({ queuePosition }) => queuePosition ?? 0)) + 1,
+      status: action.status,
+      wins: action.wins,
     };
   } else if (action.type === "remove_contestant") {
     const [contestant] = await predictionDb
@@ -233,6 +254,8 @@ export async function runAutomationAction(
       eventId: event.id,
       contestantId: action.contestantId,
     };
+  } else if (action.type === "sync_roster") {
+    command = { type: "sync_roster", eventId: event.id, contestants: action.contestants };
   } else if (action.type === "activate_event") {
     command = { type: "activate_event", eventId: event.id };
   } else if (action.type === "sync_queue") {

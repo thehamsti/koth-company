@@ -59,6 +59,7 @@ class ServerSnapshot:
     unavailable_contestant_names: frozenset[str] = frozenset()
     all_contestants: dict[str, str] = field(default_factory=dict)
     queued_contestant_names: tuple[str, ...] = ()
+    contestant_states: dict[str, tuple[str, int, int | None]] = field(default_factory=dict)
 
 
 class DecisionEngine:
@@ -119,6 +120,16 @@ class DecisionEngine:
             observed_keys = {name_identity(name) for name in observed_names}
             if not observed_keys:
                 return None
+            participant_states = observation.metadata.get("participantStates")
+            participant_states_by_identity = (
+                {
+                    name_identity(str(entry.get("name", ""))): entry
+                    for entry in participant_states
+                    if isinstance(entry, dict)
+                }
+                if isinstance(participant_states, list)
+                else {}
+            )
 
             matches = [
                 (len(observed_keys & page.names), page)
@@ -145,10 +156,18 @@ class DecisionEngine:
                     and fingerprint not in self.emitted_for_state
                 ):
                     self.emitted_for_state.add(fingerprint)
-                    return {
+                    action: dict[str, Any] = {
                         "type": "add_contestant",
                         "displayName": page.display_names[name],
                     }
+                    participant_state = participant_states_by_identity.get(name)
+                    if participant_state:
+                        action.update(
+                            status=participant_state.get("status"),
+                            wins=participant_state.get("wins"),
+                            queuePosition=participant_state.get("queuePosition"),
+                        )
+                    return action
             if len(page.frames) == page.frames.maxlen:
                 for display_name, contestant_id in snapshot.contestants.items():
                     normalized = normalize_name(display_name)
@@ -171,6 +190,58 @@ class DecisionEngine:
                         page.forget(identity)
                         return {"type": "remove_contestant", "contestantId": contestant_id}
 
+            roles_are_synced = True
+            if isinstance(participant_states, list) and participant_states:
+                contestants_by_identity = {
+                    name_identity(name): contestant_id
+                    for name, contestant_id in snapshot.all_contestants.items()
+                }
+                server_states = {
+                    name_identity(name): state for name, state in snapshot.contestant_states.items()
+                }
+                desired_states: list[dict[str, object]] = []
+                for entry in participant_states:
+                    if not isinstance(entry, dict):
+                        continue
+                    name = normalize_name(str(entry.get("name", "")))
+                    status = entry.get("status")
+                    wins = entry.get("wins")
+                    queue_position = entry.get("queuePosition")
+                    identity = name_identity(name)
+                    contestant_id = contestants_by_identity.get(identity)
+                    if (
+                        not contestant_id
+                        or status not in {"queued", "active", "eliminated"}
+                        or not isinstance(wins, int)
+                        or not isinstance(queue_position, int)
+                    ):
+                        roles_are_synced = False
+                        continue
+                    desired_states.append(
+                        {
+                            "contestantId": contestant_id,
+                            "status": status,
+                            "wins": wins,
+                            "queuePosition": queue_position,
+                        }
+                    )
+                    if server_states.get(identity) != (status, wins, queue_position):
+                        roles_are_synced = False
+                if len(desired_states) != len(participant_states):
+                    roles_are_synced = False
+                fingerprint = "roles:" + ",".join(
+                    f"{entry['contestantId']}:{entry['status']}:{entry['wins']}:{entry['queuePosition']}"
+                    for entry in desired_states
+                )
+                if (
+                    desired_states
+                    and not roles_are_synced
+                    and len(desired_states) == len(participant_states)
+                    and fingerprint not in self.emitted_for_state
+                ):
+                    self.emitted_for_state.add(fingerprint)
+                    return {"type": "sync_roster", "contestants": desired_states}
+
             observed_active = normalize_name(observation.active_name or "")
             observed_active_identity = name_identity(observed_active) if observed_active else None
             stable_active = self.active_name.push(observed_active_identity)
@@ -181,6 +252,7 @@ class DecisionEngine:
                 stable_active
                 and stable_active in existing
                 and roster_is_synced
+                and roles_are_synced
                 and "activate-event" not in self.emitted_for_state
             ):
                 self.emitted_for_state.add("activate-event")

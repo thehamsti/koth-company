@@ -264,6 +264,9 @@ def test_full_vision_worker_lifecycle_recovers_exactly_once_and_pauses_safely(
     assert worker.process(draft_frame, client.state_payload()) == {
         "type": "add_contestant",
         "displayName": "Hydra",
+        "status": "queued",
+        "wins": 0,
+        "queuePosition": 1,
         "eventId": EVENT_ID,
         "workerId": "hydramist-test",
     }

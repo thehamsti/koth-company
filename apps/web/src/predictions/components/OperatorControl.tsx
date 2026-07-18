@@ -122,7 +122,7 @@ export function OperatorControl({ initial }: { initial: OperatorState }) {
   const activeContestant = state.contestants.find(
     (entry) => entry.id === activeArena?.contestantId,
   );
-  const queuedContestants = state.contestants.filter((entry) => entry.status !== "eliminated");
+  const queuedContestants = state.contestants.filter((entry) => entry.status === "queued");
   const openMarkets = state.markets.filter((market) => market.status === "open").length;
   const heartbeatAt = state.automation?.lastHeartbeatAt
     ? new Date(state.automation.lastHeartbeatAt).getTime()
@@ -246,7 +246,7 @@ export function OperatorControl({ initial }: { initial: OperatorState }) {
                     <span>Contestants</span>
                     <h2 id="queue-title">Queue</h2>
                   </div>
-                  <b>{state.contestants.length}</b>
+                  <b>{queuedContestants.length}</b>
                 </div>
                 <div className="control-add-row">
                   <label className="sr-only" htmlFor="contestant-name">
@@ -281,9 +281,9 @@ export function OperatorControl({ initial }: { initial: OperatorState }) {
                     <kbd>/</kbd> Focus <kbd>↵</kbd> Add <kbd>Esc</kbd> Clear
                   </span>
                 </div>
-                {state.contestants.length ? (
+                {queuedContestants.length ? (
                   <ol className="control-queue-list">
-                    {state.contestants.map((entry, index) => (
+                    {queuedContestants.map((entry, index) => (
                       <li
                         key={entry.id}
                         className={entry.id === activeContestant?.id ? "is-active" : ""}

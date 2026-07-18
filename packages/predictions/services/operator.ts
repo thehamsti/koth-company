@@ -347,9 +347,44 @@ export async function runOperatorCommand(
         eventId,
         displayName: command.displayName,
         queuePosition: command.queuePosition,
+        status: command.status,
+        wins: command.wins,
+        bestStreak: command.wins,
       });
     } else if (command.type === "remove_contestant") {
       await tx.delete(contestants).where(eq(contestants.id, command.contestantId));
+    } else if (command.type === "sync_roster") {
+      const ids = command.contestants.map(({ contestantId }) => contestantId);
+      const positions = command.contestants.map(({ queuePosition }) => queuePosition);
+      if (new Set(ids).size !== ids.length || new Set(positions).size !== positions.length) {
+        throw new PredictionError(
+          "INVALID_COMMAND",
+          "Synchronized contestants and queue positions must be unique.",
+        );
+      }
+      const roster = await tx
+        .select({ id: contestants.id })
+        .from(contestants)
+        .where(eq(contestants.eventId, eventId));
+      const rosterIds = new Set(roster.map(({ id }) => id));
+      if (ids.some((id) => !rosterIds.has(id))) {
+        throw new PredictionError(
+          "INVALID_COMMAND",
+          "Synchronized roster contains a contestant from another event.",
+        );
+      }
+      for (const contestant of command.contestants) {
+        await tx
+          .update(contestants)
+          .set({
+            status: contestant.status,
+            wins: contestant.wins,
+            bestStreak: Math.max(contestant.wins, 0),
+            queuePosition: contestant.queuePosition,
+            updatedAt: new Date(),
+          })
+          .where(eq(contestants.id, contestant.contestantId));
+      }
     } else if (command.type === "create_threshold") {
       const contestant = transitionState.contestant!;
       const [existingThreshold] = await tx

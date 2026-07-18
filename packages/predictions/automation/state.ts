@@ -15,6 +15,7 @@ type AutomationAction = {
   type:
     | "add_contestant"
     | "remove_contestant"
+    | "sync_roster"
     | "activate_event"
     | "sync_queue"
     | "open_arena"
@@ -80,7 +81,9 @@ export function validateAutomationTransition(
   if (!session.enabled) throw new PredictionError("INVALID_COMMAND", "Automation is disabled.");
   if (session.paused) throw new PredictionError("INVALID_COMMAND", "Automation is paused.");
   if (
-    (action.type === "add_contestant" || action.type === "remove_contestant") &&
+    (action.type === "add_contestant" ||
+      action.type === "remove_contestant" ||
+      action.type === "sync_roster") &&
     state.eventStatus !== "draft"
   ) {
     throw new PredictionError(
@@ -94,6 +97,7 @@ export function validateAutomationTransition(
   if (
     action.type !== "add_contestant" &&
     action.type !== "remove_contestant" &&
+    action.type !== "sync_roster" &&
     action.type !== "activate_event" &&
     state.eventStatus !== "live"
   ) {

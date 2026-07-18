@@ -327,6 +327,48 @@ class VisionDetector:
                 )[0]
             else:
                 active_name = min(name_candidates, key=lambda item: (item[1][1], item[1][0]))[0]
+        leaderboard_wins = {
+            name_identity(str(entry["name"])): int(entry["wins"]) for entry in leaderboard
+        }
+        role_entries: list[dict[str, object]] = []
+        role_identities: set[str] = set()
+        for queue_name in roster:
+            identity = name_identity(queue_name)
+            role_identities.add(identity)
+            role_entries.append(
+                {
+                    "name": queue_name,
+                    "status": "queued",
+                    "wins": leaderboard_wins.get(identity, 0),
+                    "queuePosition": len(role_entries) + 1,
+                }
+            )
+        if active_name and name_identity(active_name) not in role_identities:
+            role_identities.add(name_identity(active_name))
+            role_entries.append(
+                {
+                    "name": active_name,
+                    "status": "active",
+                    "wins": current_wins or 0,
+                    "queuePosition": len(role_entries) + 1,
+                }
+            )
+        for entry in leaderboard:
+            leaderboard_name = str(entry["name"])
+            identity = name_identity(leaderboard_name)
+            if identity in role_identities:
+                continue
+            role_identities.add(identity)
+            role_entries.append(
+                {
+                    "name": leaderboard_name,
+                    "status": "eliminated",
+                    "wins": int(entry["wins"]),
+                    "queuePosition": len(role_entries) + 1,
+                }
+            )
+        overlay_metadata["participantStates"] = role_entries
+
         participants = [
             *(str(entry["name"]) for entry in leaderboard),
             *([active_name] if active_name else []),

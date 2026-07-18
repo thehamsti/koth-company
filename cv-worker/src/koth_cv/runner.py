@@ -44,8 +44,11 @@ def snapshot_from_payload(payload: dict[str, Any]) -> ServerSnapshot:
     active_arena = payload.get("activeArena")
     contestants = payload.get("contestants", [])
     contestants_by_id = {str(item["id"]): item for item in contestants}
+    event_status = str(event["status"])
     available_contestants = [
-        item for item in contestants if item.get("status") in {None, "queued", "active"}
+        item
+        for item in contestants
+        if event_status == "draft" or item.get("status") in {None, "queued", "active"}
     ]
     unavailable_names = frozenset(
         name_identity(str(item["displayName"]))
@@ -57,7 +60,7 @@ def snapshot_from_payload(payload: dict[str, Any]) -> ServerSnapshot:
     )
     return ServerSnapshot(
         event_id=str(event["id"]),
-        event_status=str(event["status"]),
+        event_status=event_status,
         contestants={str(item["displayName"]): str(item["id"]) for item in available_contestants},
         arena_id=str(active_arena["id"]) if active_arena else None,
         arena_status=str(active_arena["status"]) if active_arena else None,
@@ -68,6 +71,14 @@ def snapshot_from_payload(payload: dict[str, Any]) -> ServerSnapshot:
         queued_contestant_names=tuple(
             str(item["displayName"]) for item in contestants if item.get("status") == "queued"
         ),
+        contestant_states={
+            str(item["displayName"]): (
+                str(item.get("status", "queued")),
+                int(item.get("wins", 0)),
+                int(item["queuePosition"]) if item.get("queuePosition") is not None else None,
+            )
+            for item in contestants
+        },
     )
 
 

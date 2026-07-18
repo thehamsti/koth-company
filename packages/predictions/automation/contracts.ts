@@ -27,8 +27,26 @@ export const automationAction = z.discriminatedUnion("type", [
     type: z.literal("add_contestant"),
     ...base,
     displayName: z.string().trim().min(1).max(50),
+    status: z.enum(["queued", "active", "eliminated"]).optional(),
+    wins: z.int().min(0).max(999).optional(),
+    queuePosition: z.int().positive().optional(),
   }),
   z.object({ type: z.literal("remove_contestant"), ...base, contestantId: z.uuid() }),
+  z.object({
+    type: z.literal("sync_roster"),
+    ...base,
+    contestants: z
+      .array(
+        z.object({
+          contestantId: z.uuid(),
+          status: z.enum(["queued", "active", "eliminated"]),
+          wins: z.int().min(0).max(999),
+          queuePosition: z.int().positive(),
+        }),
+      )
+      .min(1)
+      .max(100),
+  }),
   z.object({ type: z.literal("activate_event"), ...base }),
   z.object({
     type: z.literal("sync_queue"),

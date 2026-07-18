@@ -38,6 +38,52 @@ def test_adds_a_stable_draft_roster_name() -> None:
     }
 
 
+def test_syncs_draft_roles_wins_and_queue_positions() -> None:
+    rival_id = "00000000-0000-4000-8000-000000000005"
+    engine = DecisionEngine()
+    state = ServerSnapshot(
+        event_id=EVENT_ID,
+        event_status="draft",
+        contestants={"Hydra": CONTESTANT_ID, "Rival": rival_id},
+        arena_id=None,
+        arena_status=None,
+        all_contestants={"Hydra": CONTESTANT_ID, "Rival": rival_id},
+        contestant_states={
+            "Hydra": ("queued", 0, 1),
+            "Rival": ("queued", 0, 2),
+        },
+    )
+    observation = Observation(
+        roster=("Hydra", "Rival"),
+        active_name="Hydra",
+        current_wins=2,
+        metadata={
+            "participantStates": [
+                {"name": "Rival", "status": "queued", "wins": 0, "queuePosition": 1},
+                {"name": "Hydra", "status": "active", "wins": 2, "queuePosition": 2},
+            ]
+        },
+    )
+
+    assert engine.observe(observation, state) == {
+        "type": "sync_roster",
+        "contestants": [
+            {
+                "contestantId": rival_id,
+                "status": "queued",
+                "wins": 0,
+                "queuePosition": 1,
+            },
+            {
+                "contestantId": CONTESTANT_ID,
+                "status": "active",
+                "wins": 2,
+                "queuePosition": 2,
+            },
+        ],
+    }
+
+
 def test_activates_a_synced_draft_when_current_player_is_stable() -> None:
     engine = DecisionEngine()
     state = ServerSnapshot(

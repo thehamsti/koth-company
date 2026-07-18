@@ -153,6 +153,14 @@ def test_detector_reads_all_four_overlay_zones_and_ignores_icon_digits_in_queue(
     }
     assert observation.metadata["prizeValue"] == 1050
     assert observation.metadata["leaderboard"] == [{"name": "Previous", "wins": 4}]
+    assert observation.metadata["participantStates"] == [
+        {"name": "First", "status": "queued", "wins": 0, "queuePosition": 1},
+        {"name": "Second", "status": "queued", "wins": 0, "queuePosition": 2},
+        {"name": "Third", "status": "queued", "wins": 0, "queuePosition": 3},
+        {"name": "Fourth", "status": "queued", "wins": 0, "queuePosition": 4},
+        {"name": "Hydra", "status": "active", "wins": 2, "queuePosition": 5},
+        {"name": "Previous", "status": "eliminated", "wins": 4, "queuePosition": 6},
+    ]
 
 
 def test_detector_reads_a_draft_queue_without_live_player_sections() -> None:
